@@ -59,7 +59,7 @@ mongos> sh.shardCollection("ddbs.user", {"region": 1, "uid": 1})
 
 As a good practice, we first disable balancing on db.user so that as we configure the sharding, no migration of documents occur, until we enable it.
 ```
-sh.disableBalancing("ddbs.user")
+mongos> sh.disableBalancing("ddbs.user")
 ```
 
 Then, we configure sharding zones to set a region tag for each dbms shard. The MinKey and MaxKey are reserved special values that represent the min and max range of the index values.
@@ -88,39 +88,29 @@ mongos> db.user.getShardDistribution()
 
 ### Sharding for db.article
 
-Now we do the same for db.article.
-```
-Before enabling sharding on the db.user collection, we first set the index on the db.user collection which would be the key for sharding. The choice of index is important, and here we choose a compound index composed of "region" and "uid" - region because we need to shard by region, and uid to provide high cardinality for more evenly distributed sharding. The '1' value for the index fields refer to range-based sharding (as opposed to hash-based sharding), which means that the index values close together will be put in the same shard.
-```
-mongos> db.user.createIndex({"region": 1, "uid: 1})
-mongos> sh.shardCollection("ddbs.user", {"region": 1, "uid": 1})
-```
+Now we do the same for db.article. The difficulty is that the task requires us to have "science" articles in both dbms1shard and dbms2shard. However, sharding only does not allow duplication across different shards since mongodb replication sets already account for replication. Therefore, we first do normal sharding to allocate "science" articles to dbms1shard, and "technology" articles to dbms2shardd. Then, we create another collection db.articlesci and allocate it to dbms2shard, and also dynamically update db.articlesci when db.article is updated.
 
-As a good practice, we first disable balancing on db.user so that as we configure the sharding, no migration of documents occur, until we enable it.
+#### Standard sharding procedure for db.article
+"science" articles to dbms1shard, "technology" articles to dbms2shard.
 ```
-sh.disableBalancing("ddbs.user")
-```
-
-Then, we configure sharding zones to set a region tag for each dbms shard. The MinKey and MaxKey are reserved special values that represent the min and max range of the index values.
-```
-mongos> sh.addShardTag("dbms1rs", "BJ")
+mongos> db.article.createIndex({"category": 1, "aid: 1})
+mongos> sh.shardCollection("ddbs.article", {"category": 1, "aid": 1})
+mongos> sh.disableBalancing("ddbs.article")
+mongos> sh.addShardTag("dbms1rs", "SCI")
 mongos> sh.addTagRange(
-            "ddbs.user",
-            {"region": "Beijing", "uid": MinKey},
-            {"region": "Beijing", "uid": MaxKey},
-            "BJ")
+            "ddbs.article",
+            {"category": "science", "aid": MinKey},
+            {"category": "science", "aid": MaxKey},
+            "SCI")
         )
-mongos> sh.addShardTag("dbms2rs", "HK")
+mongos> sh.addShardTag("dbms2rs", "TECH")
 mongos> sh.addTagRange(
-            "ddbs.user",
-            {"region": "Hong Kong", "uid": MinKey},
-            {"region": "Hong Kong", "uid": MaxKey},
-            "HK")
+            "ddbs.article",
+            {"category": "technology", "aid": MinKey},
+            {"category": "technology", "aid": MaxKey},
+            "TECH")
         )
-```
-Now, we are done with configuring the shard zones and can enable balancing so that the documents can migrate to the correct shards. This might take a while (a few minutes for collection of 1000 documents). After waiting for a while, we can check the shard status and distribution.
-```
-mongos> sh.enableBalancing("ddbs.user")
+mongos> sh.enableBalancing("ddbs.article")
 mongos> sh.status()
-mongos> db.user.getShardDistribution()
+mongos> db.article.getShardDistribution()
 ```
