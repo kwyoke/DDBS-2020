@@ -234,7 +234,7 @@ First, we form a temporary db.aid_cat_ts as $lookup only works on unsharded coll
 ```
 mongos> db.article.aggregate([
             { $project: {aid:1, category: 1, timestamp: 1}},
-            { $out: "aid_cat"}
+            { $out: "aid_cat_ts"}
         ])
 ```
 
@@ -262,9 +262,10 @@ mongos> db.read.aggregate(
                 { $addFields: { "aid": {$concat: [ "a", "$_id" ]}}},
 
                 // Join with article category
-                { $lookup: { from: "aid_cat", localField: "_id", foreignField: "aid", as: "someField"}},
+                { $lookup: { from: "aid_cat_ts", localField: "_id", foreignField: "aid", as: "someField"}},
                 { $addFields: { category: "$someField.category", timestamp: "$someField.timestamp"}},
-                { $unwind: "$category", "$timestamp"},
+                { $unwind: "$category"},
+                { $unwind: "$timestamp"},
                 { $project: {someField: 0}},
                 { $out: "beread"}
             ]
@@ -298,10 +299,10 @@ mongos> db.beread.getShardDistribution()
 ```
 Create db.bereadsci and assign to dbms2shard.
 ```
-db.beread.aggregate([
-    { $match: {category: "science"}},
-    { $merge: {into: "bereadsci", whenMatched: "replace"}}
-])
+mongos> db.beread.aggregate([
+            { $match: {category: "science"}},
+            { $merge: {into: "bereadsci", whenMatched: "replace"}}
+        ])
 ```
 
 Apply sharding to db.bereadsci, by assigning all of it to dbms2shard.
@@ -324,8 +325,163 @@ mongos> db.bereadsci.getShardDistribution()
 Edit the auto_refresh.py script to update db.bereadsci when db.read updated
 
 ## Populating and sharding db.poprank
-We populate db.poprank by aggregating db.read. First, we group the timestamps by month, and within each month group, we group documents by aid, and then finally aggregate as in db.beread to get the new field readNum per article per month. Then within each month, we sort the articles by their readNum in descending order. We then create another field articleAidList that stores the first five articles in each month in an array. 
+We populate db.poprank by aggregating db.read. First, we group db.read by aid, and calculate the popNumMonth, popNumWeek and popNumDay (total number of reads, comments, agrees and shares) per month, week and day for each daily timestamp at 0000 every day. 
+
+
+First, we group the timestamps by month, and within each month group, we group documents by aid, and then finally aggregate as in db.beread to get the new field popNum (total number of reads, comments, agrees, and shares) per article per month. Then within each month, we sort the articles by their popNum in descending order. We then create another field articleAidList that stores the first five articles in each month in an array. 
 We repeat again for weekly and daily groups.
+
+### Separately create db.popRankMth, db.popRankWk, db.popRankDay
+
+#### Create db.popRankMth.
+```
+mongos> db.read.aggregate([
+            // project relevant fields from db.read
+            { $project: { date: {"$toDate": {"$toLong": "$timestamp"}}, aid: 1, readOrNot: 1, agreeOrNot: 1, commentOrNot: 1, shareOrNot: 1} },
+
+            // add year and month fields
+            { $addFields: {year: { $year: "$date"}, month : {$month: "$date"}} },
+
+            // Group by year, month, aid and compute popularity score
+            {
+                $group: {
+                    _id: { "year": "$year", "month": "$month", "aid": "$aid"},
+                    popScore: { $sum: {$toInt: "$readOrNot"} + {$toInt: "$agreeOrNot"} + {$toInt: "$commentOrNot"} + {$toInt: "$shareOrNot"} }
+                }
+            },
+
+            // sort by popScore each month
+            { $sort: {popScore: -1} },
+
+            // store all articles in sorted order in array for each month
+            {
+                $group: {
+                    _id: { "year": "$_id.year", "month": "$_id.month"},
+                    articleAidList: {$push: "$_id.aid"}
+                }
+            },
+
+            // keep only top five articles in array
+            { 
+                $project: { 
+                    _id: 0, 
+                    "timestamp": { $subtract: [ { $dateFromParts: { 'year' : "$_id.year", 'month' : "$_id.month"} }, new Date("1970-01-01") ] }, 
+                    articleAidList: { $slice: ["$articleAidList", 5]},
+                    temporalGranularity: "monthly"
+                    }
+            },
+
+            // output
+            {"$out": "popRankMth"}
+        ])
+```
+
+db.collection.aggregate(
+  {
+    $project: { "timestamp": { $subtract: [ "$createdAt", new Date("1970-01-01") ] } } 
+  }
+);
+
+
+#### Create db.popRankWk.
+```
+mongos> db.read.aggregate([
+            // project relevant fields from db.read
+            { $project: { date: {"$toDate": {"$toLong": "$timestamp"}}, aid: 1, readOrNot: 1, agreeOrNot: 1, commentOrNot: 1, shareOrNot: 1} },
+
+            // add year and month fields
+            { $addFields: {year: { $year: "$date"}, month : {$month: "$date"}, week: {$week: "$date"} }},
+
+            // Group by year, month, week, aid and compute popularity score
+            {
+                $group: {
+                    _id: { "year": "$year", "month": "$month", "week": "$week", "aid": "$aid"},
+                    popScore: { $sum: {$toInt: "$readOrNot"} + {$toInt: "$agreeOrNot"} + {$toInt: "$commentOrNot"} + {$toInt: "$shareOrNot"} }
+                }
+            },
+
+            // sort by popScore each month
+            { $sort: {popScore: -1} },
+
+            // store all articles in sorted order in array for each month
+            {
+                $group: {
+                    _id: { "year": "$_id.year", "month": "$_id.month", "week": "$_id.week"},
+                    articleAidList: {$push: "$_id.aid"}
+                }
+            },
+
+            // keep only top five articles in array
+             { 
+                $project: { 
+                    _id: 0, 
+                    "timestamp": { $subtract: [ { $dateFromParts: { 'isoWeekYear' : "$_id.year", 'isoWeek' : "$_id.week"} }, new Date("1970-01-01") ] }, 
+                    articleAidList: { $slice: ["$articleAidList", 5]},
+                    temporalGranularity: "weekly"
+                    }
+            },
+
+            // output
+            {"$out": "popRankWk"}
+        ])
+```
+
+
+
+#### Create db.popRankDay.
+```
+mongos> db.read.aggregate([
+            // project relevant fields from db.read
+            { $project: { date: {"$toDate": {"$toLong": "$timestamp"}}, aid: 1, readOrNot: 1, agreeOrNot: 1, commentOrNot: 1, shareOrNot: 1} },
+
+            // add year and month fields
+            { $addFields: {year: { $year: "$date"}, month : {$month: "$date"}, week: {$week: "$date"}, day: {$dayOfYear: "$date"} }},
+
+            // Group by year, month, week, aid and compute popularity score
+            {
+                $group: {
+                    _id: { "year": "$year", "month": "$month", "week": "$week", "day": "$day", "aid": "$aid"},
+                    popScore: { $sum: {$toInt: "$readOrNot"} + {$toInt: "$agreeOrNot"} + {$toInt: "$commentOrNot"} + {$toInt: "$shareOrNot"} }
+                }
+            },
+
+            // sort by popScore each month
+            { $sort: {popScore: -1} },
+
+            // store all articles in sorted order in array for each month
+            {
+                $group: {
+                    _id: { "year": "$_id.year", "month": "$_id.month", "week": "$_id.week", "day": "$_id.day"},
+                    articleAidList: {$push: "$_id.aid"}
+                }
+            },
+
+            // keep only top five articles in array
+            { 
+                $project: { 
+                    _id: 0, 
+                    "timestamp": { $subtract: [ { $dateFromParts: { 'year' : "$_id.year", 'month' : "$_id.month", 'day': "$_id.day" }}, new Date("1970-01-01") ] }, 
+                    articleAidList: { $slice: ["$articleAidList", 5]},
+                    temporalGranularity: "daily"
+                    }
+            },
+
+            // output
+            {"$out": "popRankDay"}
+        ], { allowDiskUse: true } )
+```
+I ran out of RAM when computing db.popRankDay without allowing disk use, so remember to include allowDiskUse: true to offload some of the memory requirements to the disk.
+
+### Combine db.popRankMth, db.popRankWk, db.popRankDay into one table
+
+```
+mongos> db.popRankMth.find().forEach( function(doc) { db.popRank.insert(doc) })
+mongos> db.popRankWk.find().forEach( function(doc) { db.popRank.insert(doc) })
+mongos> db.popRankDay.find().forEach( function(doc) { db.popRank.insert(doc) })
+```
+
+db.studentInformation.find().forEach( function(copyValue){db.makingStudentInformationClone.insert(copyValue)} );
+
 
 ```
 mongos> db.read.aggregate(
