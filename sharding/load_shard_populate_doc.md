@@ -177,7 +177,7 @@ The auto_refresh.py script should print out the changes made, and the db.article
 We have to shard db.read according to user region, so first we need to add a region column to db.read, set that as index, and configure sharding zones based on it.
 
 ### Adding region column to db.read
-We use aggregate pipeline with #lookup to perform the join, which is not as intuitive in mongodb as in sql. 
+We use aggregate pipeline with $lookup to perform the join, which is not as intuitive in mongodb as in sql. 
 
 We first create another temporary collection db.uid_reg from db.user as $lookup only works on unsharded collections.
 ```
@@ -229,6 +229,7 @@ mongos> db.read_reg.getShardDistribution()
 
 To populate db.beread, we need to group db.read by "aid" and do some aggregation: (1) reads: count the total number of reads, form a list of all users who read it, (2) comment: count number of comments, form a list of all users who commented on it, (3) agrees: count number of agrees, form a list of users who agreed with it, (4) shares: count number of shares, form a list of users who shared it. We also need to shard db.beread according to article category, so we should also add a "category" column to db.beread.
 
+### Populate db.beread
 First, we form a temporary db.aid_cat as $lookup only works on unsharded collections.
 ```
 mongos> db.article.aggregate([
@@ -240,31 +241,84 @@ mongos> db.article.aggregate([
 Then, we populate db.beread using a rather complex aggregation pipeline.
 
 ```
-db.getCollection("read").aggregate(
-	[
-		// group by aid and create new fields with aggregated counts and arrays
-		{
-			$group: {
-			    _id: "$aid",
-			    readNum: { $sum: {$toInt: "$readOrNot" } },
-			    readUidList: { $addToSet: { $cond: { if: { $eq: ["$readOrNot","1"] }, then: "$uid", else: "$$REMOVE"} } },
-			    commentNum: { $sum: {$toInt: "$commentOrNot" } },
-			    commentUidList: { $addToSet: { $cond: { if: { $eq: ["$commentOrNot","1"] }, then: "$uid", else: "$$REMOVE"} } },
-			    agreeNum: { $sum: {$toInt: "$agreeOrNot" } },
-			    agreeUidList: { $addToSet: { $cond: { if: { $eq: ["$agreeOrNot","1"] }, then: "$uid", else: "$$REMOVE"} } },
-			    shareNum: { $sum: {$toInt: "$shareOrNot" } },
-			    shareUidList: { $addToSet: { $cond: { if: { $eq: ["$shareOrNot","1"] }, then: "$uid", else: "$$REMOVE"} } },
-			}
-		},
+mongos> db.getCollection("read").aggregate(
+            [
+                // group by aid and create new fields with aggregated counts and arrays
+                {
+                    $group: {
+                        _id: "$aid",
+                        readNum: { $sum: {$toInt: "$readOrNot" } },
+                        readUidList: { $addToSet: { $cond: { if: { $eq: ["$readOrNot","1"] }, then: "$uid", else: "$$REMOVE"} } },
+                        commentNum: { $sum: {$toInt: "$commentOrNot" } },
+                        commentUidList: { $addToSet: { $cond: { if: { $eq: ["$commentOrNot","1"] }, then: "$uid", else: "$$REMOVE"} } },
+                        agreeNum: { $sum: {$toInt: "$agreeOrNot" } },
+                        agreeUidList: { $addToSet: { $cond: { if: { $eq: ["$agreeOrNot","1"] }, then: "$uid", else: "$$REMOVE"} } },
+                        shareNum: { $sum: {$toInt: "$shareOrNot" } },
+                        shareUidList: { $addToSet: { $cond: { if: { $eq: ["$shareOrNot","1"] }, then: "$uid", else: "$$REMOVE"} } },
+                    }
+                },
 
-		// Modify aid from integer to string
-		{ $addFields: { "aid": {$concat: [ "a", "$_id" ]}}},
+                // Modify aid from integer to string
+                { $addFields: { "aid": {$concat: [ "a", "$_id" ]}}},
 
-		// Join with article category
-		{ $lookup: { from: "aid_reg", localField: "aid", foreignField: "aid", as: "someField"}},
-        { $addFields: { category: $someField.region"}},
-        { $unwind: "$category"},
-        { $project: {someField: 0}},
-        { $out: "beread"}
-    ]
-)
+                // Join with article category
+                { $lookup: { from: "aid_reg", localField: "aid", foreignField: "aid", as: "someField"}},
+                { $addFields: { category: "$someField.region"}},
+                { $unwind: "$category"},
+                { $project: {someField: 0}},
+                { $out: "beread"}
+            ]
+        )
+```
+Again, this will take quite long, approximately an hour for 1mil documents in db.read.
+
+### Sharding db.beread
+Then, we do the same sharding process as db.article: "science" articles to dbms1shard, "technology" articles to dbms2shard.
+```
+mongos> db.beread.createIndex({"category": 1, "aid": 1})
+mongos> sh.shardCollection("ddbs.beread", {"category": 1, "aid": 1})
+mongos> sh.disableBalancing("ddbs.beread")
+mongos> sh.addShardTag("dbms1rs", "SCI")
+mongos> sh.addTagRange(
+            "ddbs.beread",
+            {"category": "science", "aid": MinKey},
+            {"category": "science", "aid": MaxKey},
+            "SCI"
+        )
+mongos> sh.addShardTag("dbms2rs", "TECH")
+mongos> sh.addTagRange(
+            "ddbs.beread",
+            {"category": "technology", "aid": MinKey},
+            {"category": "technology", "aid": MaxKey},
+            "TECH"
+        )
+mongos> sh.enableBalancing("ddbs.beread")
+mongos> sh.status()
+mongos> db.beread.getShardDistribution()
+```
+Create db.bereadsci and assign to dbms2shard.
+```
+db.beread.aggregate([
+    { $match: {category: "science"}},
+    { $merge: {into: "bereadsci", whenMatched: "replace"}}
+])
+```
+
+Apply sharding to db.bereadsci, by assigning all of it to dbms2shard.
+```
+mongos> db.bereadsci.createIndex({"category": 1, "aid": 1})
+mongos> sh.shardCollection("ddbs.bereadsci", {"category": 1, "aid": 1})
+mongos> sh.disableBalancing("ddbs.bereadsci")
+mongos> sh.addShardTag("dbms2rs", "SCI2")
+mongos> sh.addTagRange(
+            "ddbs.bereadsci",
+            {"category": "science", "aid": MinKey},
+            {"category": "science", "aid": MaxKey},
+            "SCI2"
+        )
+mongos> sh.enableBalancing("ddbs.bereadsci")
+mongos> sh.status()
+mongos> db.bereadsci.get
+```
+#### Auto refresh of db.bereadsci
+Edit the auto_refresh.py script to update db.bereadsci when db.read updated
