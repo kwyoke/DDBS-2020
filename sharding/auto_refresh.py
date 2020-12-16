@@ -1,6 +1,5 @@
 import pymongo
 from pymongo import MongoClient
-import time
 
 client = MongoClient('mongodb://192.168.1.152:60000/')
 db = client.ddbs_proj

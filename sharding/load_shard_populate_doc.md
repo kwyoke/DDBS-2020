@@ -79,7 +79,7 @@ mongos> sh.addTagRange(
             "HK"
         )
 ```
-Now, we are done with configuring the shard zones and can enable balancing so that the documents can migrate to the correct shards. This might take a while (a few minutes for collection of 1000 documents). After waiting for a while, we can check the shard status and distribution.
+Now, we are done with configuring the shard zones and can enable balancing so that the documents can migrate to the correct shards. This might take a while (a few minutes for collection of 10000 documents). After waiting for a while, we can check the shard status and distribution.
 ```
 mongos> sh.enableBalancing("ddbs.user")
 mongos> sh.status()
@@ -141,11 +141,15 @@ mongos> sh.status()
 mongos> db.articlesci.getShardDistribution()
 ```
 Automatically refresh db.articlesci when db.article is updated with "science" articles. This is done in a python script via pymongo and db.collection.watch() which checks for any updates to the collection as the script is running. Simply run the python script auto_refresh.py in the local terminal (doesn't have to be in the container) in the background to ensure that db.articlesci is updated when necessary. $merge is good because it merges changes to existing collection instead of rewriting the entire collection.
+```
+python -m pip install pymongo
+python auto_refresh.py
+```
 
 ```
+#auto_refresh.py
 import pymongo
 from pymongo import MongoClient
-import time
 
 client = MongoClient('mongodb://192.168.1.152:60000/') #connect to host containing mongos router
 db = client.ddbs_proj
@@ -159,3 +163,12 @@ with db.article.watch(
             {"$merge": {"into": "articlesci", "whenMatched":"replace"}}
         ])
 ```
+You can test out the refreshing capability by inserting science articles into db.article. In the mongo shell of mongos container:
+```
+use ddbs
+db.article.insert([
+    {"aid": "11111", category: "science"},
+    {"aid": "22222}
+    ])
+```
+The auto_refresh.py script should print out the changes made, and the db.articlesci should be updated as well.
