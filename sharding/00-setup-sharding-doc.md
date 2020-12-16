@@ -34,7 +34,7 @@ docker-compose -f dbms1shard/docker-compose.yaml up -d
 ```
 Initiate replica set
 ```
-mongo mongodb://192.168.1.81:50001
+mongo mongodb://192.168.1.152:50001
 ```
 ```
 rs.initiate(
