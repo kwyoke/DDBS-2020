@@ -114,3 +114,29 @@ mongos> sh.enableBalancing("ddbs.article")
 mongos> sh.status()
 mongos> db.article.getShardDistribution()
 ```
+
+##### Create db.articlesci and assign to dbms2shard
+Using mongodb's aggregate pipeline, we extract articles with category: "science" into another collection db.articlesci. 
+```
+db.article.aggregate([
+    { $match: {category: "science"}},
+    { $merge: {into: "articlesci", whenMatched: "replace"}}
+])
+```
+
+Apply sharding to db.articlesci, by assigning all of it to dbms2shard.
+```
+mongos> db.articlesci.createIndex({"category": 1, "aid": 1})
+mongos> sh.shardCollection("ddbs.articlesci", {"category": 1, "aid": 1})
+mongos> sh.disableBalancing("ddbs.articlesci")
+mongos> sh.addShardTag("dbms2rs", "SCI2")
+mongos> sh.addTagRange(
+            "ddbs.articlesci",
+            {"category": "science", "aid": MinKey},
+            {"category": "science", "aid": MaxKey},
+            "SCI2"
+        )
+mongos> sh.enableBalancing("ddbs.articlesci")
+mongos> sh.status()
+mongos> db.articlesci.getShardDistribution()
+```
