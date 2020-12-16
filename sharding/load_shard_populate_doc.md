@@ -69,14 +69,14 @@ mongos> sh.addTagRange(
             "ddbs.user",
             {"region": "Beijing", "uid": MinKey},
             {"region": "Beijing", "uid": MaxKey},
-            "BJ")
+            "BJ"
         )
 mongos> sh.addShardTag("dbms2rs", "HK")
 mongos> sh.addTagRange(
             "ddbs.user",
             {"region": "Hong Kong", "uid": MinKey},
             {"region": "Hong Kong", "uid": MaxKey},
-            "HK")
+            "HK"
         )
 ```
 Now, we are done with configuring the shard zones and can enable balancing so that the documents can migrate to the correct shards. This might take a while (a few minutes for collection of 1000 documents). After waiting for a while, we can check the shard status and distribution.
