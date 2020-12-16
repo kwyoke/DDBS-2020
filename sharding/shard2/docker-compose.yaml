@@ -1,0 +1,37 @@
+
+version: '3'
+
+services:
+
+  dbms2svr1:
+    container_name: dbms2svr1
+    image: mongo
+    command: mongod --shardsvr --replSet dbms2rs --port 27017 --dbpath /data/db
+    ports:
+      - 50004:27017
+    volumes:
+      - dbms2svr1:/data/db
+
+  dbms2svr2:
+    container_name: dbms2svr2
+    image: mongo
+    command: mongod --shardsvr --replSet dbms2rs --port 27017 --dbpath /data/db
+    ports:
+      - 50005:27017
+    volumes:
+      - dbms2svr2:/data/db
+
+  dbms2svr3:
+    container_name: dbms2svr3
+    image: mongo
+    command: mongod --shardsvr --replSet dbms2rs --port 27017 --dbpath /data/db
+    ports:
+      - 50006:27017
+    volumes:
+      - dbms2svr3:/data/db
+
+volumes:
+  dbms2svr1: {}
+  dbms2svr2: {}
+  dbms2svr3: {}
+
