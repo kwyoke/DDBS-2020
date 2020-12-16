@@ -263,7 +263,7 @@ mongos> db.read.aggregate(
 
                 // Join with article category
                 { $lookup: { from: "aid_cat", localField: "_id", foreignField: "aid", as: "someField"}},
-                { $addFields: { category: "$someField.region"}},
+                { $addFields: { category: "$someField.category"}},
                 { $unwind: "$category"},
                 { $project: {someField: 0}},
                 { $out: "beread"}
