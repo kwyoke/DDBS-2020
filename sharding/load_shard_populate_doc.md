@@ -181,10 +181,10 @@ We use aggregate pipeline with #lookup to perform the join, which is not as intu
 
 We first create another temporary collection db.uid_reg from db.user as $lookup only works on unsharded collections.
 ```
-db.user.aggregate([
-    { $project: {uid:1, region: 1}},
-    { $out: "uid_reg"}
-])
+mongos> db.user.aggregate([
+            { $project: {uid:1, region: 1}},
+            { $out: "uid_reg"}
+        ])
 ```
 
 Then, we create db.read_reg by joining db.read with db.uid_reg using $lookup.
@@ -198,4 +198,73 @@ mongos> db.read.aggregate([
                 { $out: "read_reg"}
             ])
 ```
-Note that the join takes approximately an hour for 1mil documents in db.read.
+Note that the join takes approximately an hour for 1mil documents in db.read. To observe the progress, open another terminal for mongos bash and inspect the tmp collection which should have a name like "tmp.agg_out..."
+
+### Sharding db.read_reg based on region
+This is just the standard sharding procedure like what we did for db.user.
+```
+mongos> db.read_reg.createIndex({"region": 1, "id": 1})
+mongos> sh.shardCollection("ddbs.read_reg", {"region": 1, "id": 1})
+mongos> sh.disableBalancing("ddbs.read_reg")
+mongos> sh.addShardTag("dbms1rs", "BJ")
+mongos> sh.addTagRange(
+            "ddbs.read_reg",
+            {"region": "Beijing", "id": MinKey},
+            {"region": "Beijing", "id": MaxKey},
+            "BJ"
+        )
+mongos> sh.addShardTag("dbms2rs", "HK")
+mongos> sh.addTagRange(
+            "ddbs.read_reg",
+            {"region": "Hong Kong", "id": MinKey},
+            {"region": "Hong Kong", "id": MaxKey},
+            "HK"
+        )
+mongos> sh.enableBalancing("ddbs.read_reg")
+mongos> sh.status()
+mongos> db.read_reg.getShardDistribution()
+```
+
+## Populate db.beread based on db.read and sharding by article category
+
+To populate db.beread, we need to group db.read by "aid" and do some aggregation: (1) reads: count the total number of reads, form a list of all users who read it, (2) comment: count number of comments, form a list of all users who commented on it, (3) agrees: count number of agrees, form a list of users who agreed with it, (4) shares: count number of shares, form a list of users who shared it. We also need to shard db.beread according to article category, so we should also add a "category" column to db.beread.
+
+First, we form a temporary db.aid_cat as $lookup only works on unsharded collections.
+```
+mongos> db.article.aggregate([
+            { $project: {aid:1, category: 1}},
+            { $out: "aid_cat"}
+        ])
+```
+
+Then, we populate db.beread using a rather complex aggregation pipeline.
+
+```
+db.getCollection("read").aggregate(
+	[
+		// group by aid and create new fields with aggregated counts and arrays
+		{
+			$group: {
+			    _id: "$aid",
+			    readNum: { $sum: {$toInt: "$readOrNot" } },
+			    readUidList: { $addToSet: { $cond: { if: { $eq: ["$readOrNot","1"] }, then: "$uid", else: "$$REMOVE"} } },
+			    commentNum: { $sum: {$toInt: "$commentOrNot" } },
+			    commentUidList: { $addToSet: { $cond: { if: { $eq: ["$commentOrNot","1"] }, then: "$uid", else: "$$REMOVE"} } },
+			    agreeNum: { $sum: {$toInt: "$agreeOrNot" } },
+			    agreeUidList: { $addToSet: { $cond: { if: { $eq: ["$agreeOrNot","1"] }, then: "$uid", else: "$$REMOVE"} } },
+			    shareNum: { $sum: {$toInt: "$shareOrNot" } },
+			    shareUidList: { $addToSet: { $cond: { if: { $eq: ["$shareOrNot","1"] }, then: "$uid", else: "$$REMOVE"} } },
+			}
+		},
+
+		// Modify aid from integer to string
+		{ $addFields: { "aid": {$concat: [ "a", "$_id" ]}}},
+
+		// Join with article category
+		{ $lookup: { from: "aid_reg", localField: "aid", foreignField: "aid", as: "someField"}},
+        { $addFields: { category: $someField.region"}},
+        { $unwind: "$category"},
+        { $project: {someField: 0}},
+        { $out: "beread"}
+    ]
+)
