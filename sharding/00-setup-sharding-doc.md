@@ -145,7 +145,7 @@ docker-compose -f grid2shard/docker-compose.yaml up -d
 ```
 Initiate replica set
 ```
-mongo mongodb://192.168.1.152:50007
+mongo mongodb://192.168.1.152:50010
 ```
 ```
 rs.initiate(
