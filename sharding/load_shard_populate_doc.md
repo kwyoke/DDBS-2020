@@ -241,7 +241,7 @@ mongos> db.article.aggregate([
 Then, we populate db.beread using a rather complex aggregation pipeline.
 
 ```
-mongos> db.getCollection("read").aggregate(
+mongos> db.read.aggregate(
             [
                 // group by aid and create new fields with aggregated counts and arrays
                 {
@@ -262,7 +262,7 @@ mongos> db.getCollection("read").aggregate(
                 { $addFields: { "aid": {$concat: [ "a", "$_id" ]}}},
 
                 // Join with article category
-                { $lookup: { from: "aid_reg", localField: "aid", foreignField: "aid", as: "someField"}},
+                { $lookup: { from: "aid_cat", localField: "_id", foreignField: "aid", as: "someField"}},
                 { $addFields: { category: "$someField.region"}},
                 { $unwind: "$category"},
                 { $project: {someField: 0}},
