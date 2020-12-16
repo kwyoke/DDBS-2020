@@ -225,15 +225,15 @@ mongos> sh.status()
 mongos> db.read_reg.getShardDistribution()
 ```
 
-## Populate db.beread based on db.read and sharding by article category
+## Populate and shard db.beread
 
 To populate db.beread, we need to group db.read by "aid" and do some aggregation: (1) reads: count the total number of reads, form a list of all users who read it, (2) comment: count number of comments, form a list of all users who commented on it, (3) agrees: count number of agrees, form a list of users who agreed with it, (4) shares: count number of shares, form a list of users who shared it. We also need to shard db.beread according to article category, so we should also add a "category" column to db.beread.
 
 ### Populate db.beread
-First, we form a temporary db.aid_cat as $lookup only works on unsharded collections.
+First, we form a temporary db.aid_cat_ts as $lookup only works on unsharded collections.
 ```
 mongos> db.article.aggregate([
-            { $project: {aid:1, category: 1}},
+            { $project: {aid:1, category: 1, timestamp: 1}},
             { $out: "aid_cat"}
         ])
 ```
@@ -263,14 +263,14 @@ mongos> db.read.aggregate(
 
                 // Join with article category
                 { $lookup: { from: "aid_cat", localField: "_id", foreignField: "aid", as: "someField"}},
-                { $addFields: { category: "$someField.category"}},
-                { $unwind: "$category"},
+                { $addFields: { category: "$someField.category", timestamp: "$someField.timestamp"}},
+                { $unwind: "$category", "$timestamp"},
                 { $project: {someField: 0}},
                 { $out: "beread"}
             ]
         )
 ```
-Again, this will take quite long, approximately an hour for 1mil documents in db.read.
+This step is quite fast, about a few minutes, since there's only 10000 articles.
 
 ### Sharding db.beread
 Then, we do the same sharding process as db.article: "science" articles to dbms1shard, "technology" articles to dbms2shard.
@@ -318,7 +318,42 @@ mongos> sh.addTagRange(
         )
 mongos> sh.enableBalancing("ddbs.bereadsci")
 mongos> sh.status()
-mongos> db.bereadsci.get
+mongos> db.bereadsci.getShardDistribution()
 ```
 #### Auto refresh of db.bereadsci
 Edit the auto_refresh.py script to update db.bereadsci when db.read updated
+
+## Populating and sharding db.poprank
+We populate db.poprank by aggregating db.read. First, we group the timestamps by month, and within each month group, we group documents by aid, and then finally aggregate as in db.beread to get the new field readNum per article per month. Then within each month, we sort the articles by their readNum in descending order. We then create another field articleAidList that stores the first five articles in each month in an array. 
+We repeat again for weekly and daily groups.
+
+```
+mongos> db.read.aggregate(
+            [
+                // group by aid and create new fields with aggregated counts and arrays
+                {
+                    $group: {
+                        _id: "$aid",
+                        readNum: { $sum: {$toInt: "$readOrNot" } },
+                        readUidList: { $addToSet: { $cond: { if: { $eq: ["$readOrNot","1"] }, then: "$uid", else: "$$REMOVE"} } },
+                        commentNum: { $sum: {$toInt: "$commentOrNot" } },
+                        commentUidList: { $addToSet: { $cond: { if: { $eq: ["$commentOrNot","1"] }, then: "$uid", else: "$$REMOVE"} } },
+                        agreeNum: { $sum: {$toInt: "$agreeOrNot" } },
+                        agreeUidList: { $addToSet: { $cond: { if: { $eq: ["$agreeOrNot","1"] }, then: "$uid", else: "$$REMOVE"} } },
+                        shareNum: { $sum: {$toInt: "$shareOrNot" } },
+                        shareUidList: { $addToSet: { $cond: { if: { $eq: ["$shareOrNot","1"] }, then: "$uid", else: "$$REMOVE"} } },
+                    }
+                },
+
+                // Modify aid from integer to string
+                { $addFields: { "aid": {$concat: [ "a", "$_id" ]}}},
+
+                // Join with article category
+                { $lookup: { from: "aid_cat", localField: "_id", foreignField: "aid", as: "someField"}},
+                { $addFields: { category: "$someField.category"}},
+                { $unwind: "$category"},
+                { $project: {someField: 0}},
+                { $out: "beread"}
+            ]
+        )
+```
