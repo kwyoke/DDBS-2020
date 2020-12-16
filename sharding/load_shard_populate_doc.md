@@ -93,7 +93,7 @@ Now we do the same for db.article. The difficulty is that the task requires us t
 #### Standard sharding procedure for db.article
 "science" articles to dbms1shard, "technology" articles to dbms2shard.
 ```
-mongos> db.article.createIndex({"category": 1, "aid: 1})
+mongos> db.article.createIndex({"category": 1, "aid": 1})
 mongos> sh.shardCollection("ddbs.article", {"category": 1, "aid": 1})
 mongos> sh.disableBalancing("ddbs.article")
 mongos> sh.addShardTag("dbms1rs", "SCI")
