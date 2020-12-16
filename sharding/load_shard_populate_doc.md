@@ -165,10 +165,37 @@ with db.article.watch(
 ```
 You can test out the refreshing capability by inserting science articles into db.article. In the mongo shell of mongos container:
 ```
-use ddbs
-db.article.insert([
-    {"aid": "11111", category: "science"},
-    {"aid": "22222}
-    ])
+mongos> use ddbs
+mongos> db.article.insert([
+            {"aid": "11111", category: "science"},
+            {"aid": "22222}
+            ])
 ```
 The auto_refresh.py script should print out the changes made, and the db.articlesci should be updated as well.
+
+## Implementing sharding for read collection
+We have to shard db.read according to user region, so first we need to add a region column to db.read, set that as index, and configure sharding zones based on it.
+
+### Adding region column to db.read
+We use aggregate pipeline with #lookup to perform the join, which is not as intuitive in mongodb as in sql. 
+
+We first create another temporary collection db.uid_reg from db.user as $lookup only works on unsharded collections.
+```
+db.user.aggregate([
+    { $project: {uid:1, region: 1}},
+    { $out: "uid_reg"}
+])
+```
+
+Then, we create db.read_reg by joining db.read with db.uid_reg using $lookup.
+```
+mongos> use ddbs
+mongos> db.read.aggregate([
+                { $lookup: {from: "uid_reg", localField: "uid", foreignField: "uid", as: "someField"}},
+                { $addFields: { region: "$someField.region"}},
+                { $unwind: "$region"},
+                { $project: { someField: 0}},
+                { $out: "read_reg"}
+            ])
+```
+Note that the join takes approximately an hour for 1mil documents in db.read.
