@@ -101,14 +101,14 @@ mongos> sh.addTagRange(
             "ddbs.article",
             {"category": "science", "aid": MinKey},
             {"category": "science", "aid": MaxKey},
-            "SCI")
+            "SCI"
         )
 mongos> sh.addShardTag("dbms2rs", "TECH")
 mongos> sh.addTagRange(
             "ddbs.article",
             {"category": "technology", "aid": MinKey},
             {"category": "technology", "aid": MaxKey},
-            "TECH")
+            "TECH"
         )
 mongos> sh.enableBalancing("ddbs.article")
 mongos> sh.status()
