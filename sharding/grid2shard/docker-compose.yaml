@@ -8,7 +8,7 @@ services:
     image: mongo
     command: mongod --shardsvr --replSet grid2rs --port 27017 --dbpath /data/db
     ports:
-      - 50008:27017
+      - 50004:27017
     volumes:
       - grid2svr:/data/db
 

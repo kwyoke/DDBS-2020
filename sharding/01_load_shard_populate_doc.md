@@ -120,10 +120,10 @@ mongos> db.article.getShardDistribution()
 ##### Create db.articlesci and assign to dbms2shard
 Using mongodb's aggregate pipeline, we extract articles with category: "science" into another collection db.articlesci. 
 ```
-db.article.aggregate([
-    { $match: {category: "science"}},
-    { $merge: {into: "articlesci", whenMatched: "replace"}}
-])
+mongos> db.article.aggregate([
+        { $match: {category: "science"}},
+        { $merge: {into: "articlesci", whenMatched: "replace"}}
+    ])
 ```
 
 Apply sharding to db.articlesci, by assigning all of it to dbms2shard.

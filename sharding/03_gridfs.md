@@ -1,24 +1,23 @@
 ### Sharding for gridfs
 This is just the standard sharding procedure like what we did for db.user.
 ```
-mongos> db.fs.chunks.createIndex({"region": 1, "id": 1})
-mongos> sh.shardCollection("ddbs.read", {"region": 1, "id": 1})
-mongos> sh.disableBalancing("ddbs.read")
-mongos> sh.addShardTag("dbms1rs", "BJ")
+mongos> db.fs.chunks.createIndex({"files_id": 1})
+mongos> sh.shardCollection("ddbs.fs.chunks", {"files_id": "hashed"})
+mongos> sh.addShardTag("grid1rs", "MEDIA")
 mongos> sh.addTagRange(
-            "ddbs.read",
-            {"region": "Beijing", "id": MinKey},
-            {"region": "Beijing", "id": MaxKey},
-            "BJ"
+            "ddbs.fs.chunks",
+            {"files_id": MinKey},
+            {"files_id": MaxKey},
+            "MEDIA"
         )
-mongos> sh.addShardTag("dbms2rs", "HK")
+mongos> sh.addShardTag("grid2rs", "MEDIA")
 mongos> sh.addTagRange(
-            "ddbs.read",
-            {"region": "Hong Kong", "id": MinKey},
-            {"region": "Hong Kong", "id": MaxKey},
-            "HK"
+            "ddbs.fs.chunks",
+            {"files_id": MinKey},
+            {"files_id": MaxKey},
+            "MEDIA"
         )
-mongos> sh.enableBalancing("ddbs.read")
+mongos> sh.enableBalancing("ddbs.fs.chunks")
 mongos> sh.status()
-mongos> db.read.getShardDistribution()
+mongos> db.fs.chunks.getShardDistribution()
 ```
