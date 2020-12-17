@@ -6,6 +6,6 @@ do
         do
 
         BASEFILENAME=$(basename $FILE)
-        mongofiles --host=192.168.1.152:60000 --local=$FILE -d=ddbs_proj put $BASEFILENAME 
+        mongofiles --host=192.168.1.152:60000 --local=$FILE -d=ddbs put $BASEFILENAME 
     done      
 done

@@ -104,7 +104,7 @@ mongos> sh.status()
 
 ## Adding another shard
 ### Grid1 shard servers
-Start grid1 shard servers (3 member replicas set)
+Start grid1 shard servers (single member replicaset)
 ```
 docker-compose -f grid1shard/docker-compose.yaml up -d
 ```
@@ -118,8 +118,6 @@ rs.initiate(
     _id: "grid1rs",
     members: [
       { _id : 0, host : "192.168.1.152:50007" },
-      { _id : 1, host : "192.168.1.152:50008" },
-      { _id : 2, host : "192.168.1.152:50009" }
     ]
   }
 )
@@ -133,28 +131,26 @@ mongo mongodb://192.168.1.152:60000
 ```
 Add shard
 ```
-mongos> sh.addShard("grid1rs/192.168.1.152:50007,192.168.1.152:50008,192.168.1.152:50009")
+mongos> sh.addShard("grid1rs/192.168.1.152:50007")
 mongos> sh.status()
 ```
 
 ## Adding another shard
 ### Grid2 shard servers
-Start grid2 shard servers (3 member replicas set)
+Start grid2 shard servers (single member replicaset)
 ```
 docker-compose -f grid2shard/docker-compose.yaml up -d
 ```
 Initiate replica set
 ```
-mongo mongodb://192.168.1.152:50010
+mongo mongodb://192.168.1.152:50008
 ```
 ```
 rs.initiate(
   {
     _id: "grid2rs",
     members: [
-      { _id : 0, host : "192.168.1.152:50010" },
-      { _id : 1, host : "192.168.1.152:50011" },
-      { _id : 2, host : "192.168.1.152:50012" }
+      { _id : 0, host : "192.168.1.152:50008" }
     ]
   }
 )
@@ -168,6 +164,6 @@ mongo mongodb://192.168.1.152:60000
 ```
 Add shard
 ```
-mongos> sh.addShard("grid2rs/192.168.1.152:50010,192.168.1.152:50011,192.168.1.152:50012")
+mongos> sh.addShard("grid2rs/192.168.1.152:50008")
 mongos> sh.status()
 ```

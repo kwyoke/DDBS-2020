@@ -172,7 +172,7 @@ mongos> db.read.aggregate([
 ```
 Note that the join takes approximately an hour for 1mil documents in db.read. To observe the progress, open another terminal for mongos bash and inspect the tmp collection which should have a name like "tmp.agg_out..."
 
-### Adding category column to db.read
+### Adding category and article timestamp column to db.read
 For subsequent purposes, it will be more convenient if the read table has the category column (for sharding db.beread and db.popRank). Therefore, we will add a category column to db.read before sharding it.
 
 First, we form a temporary db.aid_cat_ts as $lookup only works on unsharded collections.
@@ -183,12 +183,14 @@ mongos> db.article.aggregate([
         ])
 ```
 
-Then we add the category column.
+Then we add the category column and article timestamp column.
+
 ```
 mongos> db.read.aggregate([
                 { $lookup: {from: "aid_cat_ts", localField: "aid", foreignField: "aid", as: "someField"}},
-                { $addFields: { category: "$someField.category"}},
+                { $addFields: { category: "$someField.category", article_ts: "$someField.timestamp"}},
                 { $unwind: "$category"},
+                { $unwind: "$article_ts"},
                 { $project: { someField: 0}},
                 { $out: "read"}
             ],
@@ -237,6 +239,7 @@ mongos> db.read.aggregate(
                     $group: {
                         _id: "$aid",
                         category: { $first: "$category" },
+                        timestamp: { $first: "$article_ts" },
                         readNum: { $sum: {$toInt: "$readOrNot" } },
                         readUidList: { $addToSet: { $cond: { if: { $eq: ["$readOrNot","1"] }, then: "$uid", else: "$$REMOVE"} } },
                         commentNum: { $sum: {$toInt: "$commentOrNot" } },
@@ -928,7 +931,7 @@ mongos> db.popRankSci2.getShardDistribution()
 
 At this point, we have several collections that are sharded and residing on dbms1shard and dbms2shard, and several that are temporal and reside on the mongos server,
 
-| Collection  | Sharded to dbms1_shard | Sharded to dbms2_shard |
+| Collection  | Zone tag @ dbms1_shard | Zone tag @ dbms2_shard |
 | ------------- | ------------- | ------------- |
 | user  | BJ  | HK |
 | article  | SCI  | TECH |

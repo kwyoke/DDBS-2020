@@ -1,6 +1,6 @@
 # Setting up auto refreshing of derived collections
 
-For this project, db.user, db.article, and db.read (and db.read_reg_cat) are the raw main collections which will receive insertions, while db.articlesci, db.beread (and db.bereadsci) and db.popRank series are computed from these three main collections. Therefore, we need to be able to automatically refresh the derived collections when there are insertions, updates, and removals from db.user, db.article and db.read. 
+For this project, db.user, db.article, and db.read are the raw main collections which will receive insertions, deletions and updates, while db.articlesci, db.beread, db.bereadsci, db.popRank, db.popRankSci, db.popRankSci2 and db.popRankTech are computed from these three main collections. Therefore, we need to be able to automatically refresh the derived collections when there are insertions, updates, and removals from db.user, db.article and db.read. 
 
 Specifically, the refreshes to be performed are summarised as below:
 
@@ -43,3 +43,21 @@ mongos> db.article.insert([
             ])
 ```
 The auto_refresh.py script should print out the changes made, and the db.articlesci should be updated as well.
+
+
+{
+	"_id" : ObjectId("5fd9644ebaedf1c547ffffff"),
+	"timestamp" : "1506346147000",
+	"id" : "r1385",
+	"uid" : "12345",
+	"aid" : "8604",
+	"readOrNot" : "0",
+	"readTimeLength" : "0",
+	"readSequence" : "0",
+	"agreeOrNot" : "0",
+	"commentOrNot" : "0",
+	"shareOrNot" : "54321",
+	"commentDetail" : "",
+	"region" : "Beijing",
+	"category" : "science"
+}
