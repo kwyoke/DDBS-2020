@@ -2,6 +2,8 @@
 
 This document assumes the docker containers are set up according to 00-setup-sharding-doc.md.
 
+It contains instructions to load, shard and populate the user, article, read, beread and poprank collections.
+
 ## Import json data files to collections with mongoimport
 
 First, we need to copy the data files into the docker container hosting the mongos router. Here, the name of the mongos container is 'mongos'.
@@ -155,7 +157,7 @@ mongos> db.user.aggregate([
         ])
 ```
 
-Then, we create db.read_reg by joining db.read with db.uid_reg using $lookup.
+Then, we add region column by joining db.read with db.uid_reg using $lookup.
 ```
 mongos> use ddbs
 mongos> db.read.aggregate([
@@ -163,41 +165,16 @@ mongos> db.read.aggregate([
                 { $addFields: { region: "$someField.region"}},
                 { $unwind: "$region"},
                 { $project: { someField: 0}},
-                { $out: "read_reg"}
-            ])
+                { $out: "read"}
+            ],
+            { allowDiskUse: true }
+            )
 ```
 Note that the join takes approximately an hour for 1mil documents in db.read. To observe the progress, open another terminal for mongos bash and inspect the tmp collection which should have a name like "tmp.agg_out..."
 
-### Sharding db.read_reg based on region
-This is just the standard sharding procedure like what we did for db.user.
-```
-mongos> db.read_reg.createIndex({"region": 1, "id": 1})
-mongos> sh.shardCollection("ddbs.read_reg", {"region": 1, "id": 1})
-mongos> sh.disableBalancing("ddbs.read_reg")
-mongos> sh.addShardTag("dbms1rs", "BJ")
-mongos> sh.addTagRange(
-            "ddbs.read_reg",
-            {"region": "Beijing", "id": MinKey},
-            {"region": "Beijing", "id": MaxKey},
-            "BJ"
-        )
-mongos> sh.addShardTag("dbms2rs", "HK")
-mongos> sh.addTagRange(
-            "ddbs.read_reg",
-            {"region": "Hong Kong", "id": MinKey},
-            {"region": "Hong Kong", "id": MaxKey},
-            "HK"
-        )
-mongos> sh.enableBalancing("ddbs.read_reg")
-mongos> sh.status()
-mongos> db.read_reg.getShardDistribution()
-```
+### Adding category column to db.read
+For subsequent purposes, it will be more convenient if the read table has the category column (for sharding db.beread and db.popRank). Therefore, we will add a category column to db.read before sharding it.
 
-## Populate and shard db.beread
-
-To populate db.beread, we need to group db.read by "aid" and do some aggregation: (1) reads: count the total number of reads, form a list of all users who read it, (2) comment: count number of comments, form a list of all users who commented on it, (3) agrees: count number of agrees, form a list of users who agreed with it, (4) shares: count number of shares, form a list of users who shared it. We also need to shard db.beread according to article category, so we should also add a "category" column to db.beread.
-
-### Populate db.beread
 First, we form a temporary db.aid_cat_ts as $lookup only works on unsharded collections.
 ```
 mongos> db.article.aggregate([
@@ -206,7 +183,51 @@ mongos> db.article.aggregate([
         ])
 ```
 
-Then, we populate db.beread using a rather complex aggregation pipeline.
+Then we add the category column.
+```
+mongos> db.read.aggregate([
+                { $lookup: {from: "aid_cat_ts", localField: "aid", foreignField: "aid", as: "someField"}},
+                { $addFields: { category: "$someField.category"}},
+                { $unwind: "$category"},
+                { $project: { someField: 0}},
+                { $out: "read"}
+            ],
+            { allowDiskUse: true }
+            )
+```
+
+### Sharding db.read based on region
+This is just the standard sharding procedure like what we did for db.user.
+```
+mongos> db.read.createIndex({"region": 1, "id": 1})
+mongos> sh.shardCollection("ddbs.read", {"region": 1, "id": 1})
+mongos> sh.disableBalancing("ddbs.read")
+mongos> sh.addShardTag("dbms1rs", "BJ")
+mongos> sh.addTagRange(
+            "ddbs.read",
+            {"region": "Beijing", "id": MinKey},
+            {"region": "Beijing", "id": MaxKey},
+            "BJ"
+        )
+mongos> sh.addShardTag("dbms2rs", "HK")
+mongos> sh.addTagRange(
+            "ddbs.read",
+            {"region": "Hong Kong", "id": MinKey},
+            {"region": "Hong Kong", "id": MaxKey},
+            "HK"
+        )
+mongos> sh.enableBalancing("ddbs.read")
+mongos> sh.status()
+mongos> db.read.getShardDistribution()
+```
+
+## Populate and shard db.beread
+
+To populate db.beread, we need to group db.read by "aid" and do some aggregation: (1) reads: count the total number of reads, form a list of all users who read it, (2) comment: count number of comments, form a list of all users who commented on it, (3) agrees: count number of agrees, form a list of users who agreed with it, (4) shares: count number of shares, form a list of users who shared it. We also need to shard db.beread according to article category, so we should also add a "category" column to db.beread.
+
+### Populate db.beread
+
+We populate db.beread using a rather complex aggregation pipeline.
 
 ```
 mongos> db.read.aggregate(
@@ -215,6 +236,7 @@ mongos> db.read.aggregate(
                 {
                     $group: {
                         _id: "$aid",
+                        category: { $first: "$category" },
                         readNum: { $sum: {$toInt: "$readOrNot" } },
                         readUidList: { $addToSet: { $cond: { if: { $eq: ["$readOrNot","1"] }, then: "$uid", else: "$$REMOVE"} } },
                         commentNum: { $sum: {$toInt: "$commentOrNot" } },
@@ -229,14 +251,9 @@ mongos> db.read.aggregate(
                 // Modify aid from integer to string
                 { $addFields: { "aid": {$concat: [ "a", "$_id" ]}}},
 
-                // Join with article category
-                { $lookup: { from: "aid_cat_ts", localField: "_id", foreignField: "aid", as: "someField"}},
-                { $addFields: { category: "$someField.category", timestamp: "$someField.timestamp"}},
-                { $unwind: "$category"},
-                { $unwind: "$timestamp"},
-                { $project: {someField: 0}},
                 { $out: "beread"}
-            ]
+            ],
+            { allowDiskUse: true }
         )
 ```
 This step is quite fast, about a few minutes, since there's only 10000 articles.
@@ -301,7 +318,8 @@ The task also requires us to generate three types of db.poprank tables: (1) db.p
 
 #### Create db.popRankMth.
 
-Each aggregation pipeline takes about an hour to process given the huge number of records in db.read.
+Each aggregation pipeline takes less than a minute for db.read of 1 million documents.
+
 ```
 mongos> db.read.aggregate([
             // project relevant fields from db.read
@@ -309,9 +327,9 @@ mongos> db.read.aggregate([
 
             // add year and month fields
             { $addFields: {
-                year: { $year: "$date"}, 
-                month : {$month: "$date"},
-                popScore: {$sum: [{$toInt: "$readOrNot"}, {$toInt: "$agreeOrNot"}, {$toInt: "$commentOrNot"}, {$toInt: "$shareOrNot"}]}
+                year: { $year: "$date" },
+                month: { $month: "$date" },
+                popScore: {$sum: [{$toInt: "$readOrNot"}, {$toInt: "$agreeOrNot"}, {$toInt: "$commentOrNot"}, {$toInt: "$shareOrNot"}]}}
             },
 
             // add unix timestamp defined only by yr and mth
@@ -339,7 +357,7 @@ mongos> db.read.aggregate([
             // keep only top five articles in array
             { 
                 $project: { 
-                    _id: {$concat: ["m","$_id"]}, 
+                    _id: {$concat: ["m", { $toString: "$_id" }]}, 
                     timestamp: "$_id", 
                     articleAidList: { $slice: ["$articleAidList", 5]},
                     temporalGranularity: "monthly"
@@ -348,7 +366,8 @@ mongos> db.read.aggregate([
 
             // output
             {"$out": "popRankMth"}
-        ]{ allowDiskUse: true })
+        ],
+        { allowDiskUse: true })
 ```
 
 #### Create db.popRankWk.
@@ -359,10 +378,10 @@ mongos> db.read.aggregate([
 
             // add year and month fields
             { $addFields: {
-                year: { $year: "$date"}, 
-                month : {$month: "$date"},
+                year: { $year: "$date" },
+                month: { $month: "$date" },
                 week: {$week: "$date"},
-                popScore: {$sum: [{$toInt: "$readOrNot"}, {$toInt: "$agreeOrNot"}, {$toInt: "$commentOrNot"}, {$toInt: "$shareOrNot"}]}
+                popScore: {$sum: [{$toInt: "$readOrNot"}, {$toInt: "$agreeOrNot"}, {$toInt: "$commentOrNot"}, {$toInt: "$shareOrNot"}]}}
             },
 
             // add unix timestamp defined only by yr and mth
@@ -390,7 +409,7 @@ mongos> db.read.aggregate([
             // keep only top five articles in array
             { 
                 $project: { 
-                    _id: {$concat: ["w","$_id"]}, 
+                    _id: {$concat: ["w", { $toString: "$_id" }]}, 
                     timestamp: "$_id", 
                     articleAidList: { $slice: ["$articleAidList", 5]},
                     temporalGranularity: "weekly"
@@ -399,26 +418,27 @@ mongos> db.read.aggregate([
 
             // output
             {"$out": "popRankWk"}
-        ]{ allowDiskUse: true })
+        ],
+        { allowDiskUse: true })
 ```
 
 
 #### Create db.popRankDay.
 ```
-db.read.aggregate([
+mongos> db.read.aggregate([
             // project relevant fields from db.read
             { $project: { date: {"$toDate": {"$toLong": "$timestamp"}}, aid: 1, readOrNot: 1, agreeOrNot: 1, commentOrNot: 1, shareOrNot: 1} },
 
             // add year and month fields
             { $addFields: {
-                year: { $year: "$date"}, 
-                month : {$month: "$date"},
-                day: {$dayOfYear: "$date"},
-                popScore: {$sum: [{$toInt: "$readOrNot"}, {$toInt: "$agreeOrNot"}, {$toInt: "$commentOrNot"}, {$toInt: "$shareOrNot"}]}
+                year: { $year: "$date" },
+                month: { $month: "$date" },
+                day: {$dayOfYear: "$date" },
+                popScore: {$sum: [{$toInt: "$readOrNot"}, {$toInt: "$agreeOrNot"}, {$toInt: "$commentOrNot"}, {$toInt: "$shareOrNot"}]}}
             },
 
             // add unix timestamp defined only by yr and mth
-            { $addFields: { timestamp: { $subtract: [ { $dateFromParts: { 'year' : "$year", 'month' : "$month", 'day': "$day" } }, new Date("1970-01-01") ] }}},
+            { $addFields: { timestamp: { $subtract: [ { $dateFromParts: { 'year' : "$year", 'month' : "$month", 'day': "$day"} }, new Date("1970-01-01") ] }}},
 
             // Group by year, month, aid and compute popularity score
             {
@@ -442,7 +462,7 @@ db.read.aggregate([
             // keep only top five articles in array
             { 
                 $project: { 
-                    _id: {$concat: ["d","$_id"]}, 
+                    _id: {$concat: ["d", { $toString: "$_id" }]}, 
                     timestamp: "$_id", 
                     articleAidList: { $slice: ["$articleAidList", 5]},
                     temporalGranularity: "daily"
@@ -451,7 +471,8 @@ db.read.aggregate([
 
             // output
             {"$out": "popRankDay"}
-        ], { allowDiskUse: true })
+        ],
+        { allowDiskUse: true })
 ```
 I ran out of RAM when computing db.popRankDay without allowing disk use, so remember to include allowDiskUse: true to offload some of the memory requirements to the disk.
 
@@ -466,25 +487,12 @@ mongos> db.popRank.aggregate([ {$sort: {timestamp:1}}, {$out: "popRank"} ])
 ```
 
 ### Create db.popRankSci
-First, we need to add "category" field to db.read table so we can filter out science and technology articles. This is similar to what we did for adding the "region" field from db.user. We use back the temporary collection db.aid_cat_ts that is an unsharded collection mapping aid to category.
-
-```
-mongos> db.read.aggregate([
-                { $lookup: {from: "aid_cat_ts", localField: "aid", foreignField: "aid", as: "someField"}},
-                { $addFields: { category: "$someField.category"}},
-                { $unwind: "$category"},
-                { $project: { someField: 0}},
-                { $out: "read_cat"}
-            ]{ allowDiskUse: true })
-```
-Again, this will take about an hour for one million documents in db.read.
-
-Then, we do the same as before, and generate three separate collections, retaining only science articles, and combine the collections into one table.
+We do the same as before, and generate three separate collections, retaining only science articles, and combine the collections into one table.
 
 Monthly:
 
 ```
-db.read_cat.aggregate([
+mongos> db.read.aggregate([
             // retain only science articles
             { $match: {category: "science"}},
 
@@ -493,9 +501,9 @@ db.read_cat.aggregate([
 
             // add year and month fields
             { $addFields: {
-                year: { $year: "$date"}, 
-                month : {$month: "$date"},
-                popScore: {$sum: [{$toInt: "$readOrNot"}, {$toInt: "$agreeOrNot"}, {$toInt: "$commentOrNot"}, {$toInt: "$shareOrNot"}]}
+                year: { $year: "$date" },
+                month: { $month: "$date" },
+                popScore: {$sum: [{$toInt: "$readOrNot"}, {$toInt: "$agreeOrNot"}, {$toInt: "$commentOrNot"}, {$toInt: "$shareOrNot"}]}}
             },
 
             // add unix timestamp defined only by yr and mth
@@ -523,7 +531,7 @@ db.read_cat.aggregate([
             // keep only top five articles in array
             { 
                 $project: { 
-                    _id: {$concat: ["m","$_id"]}, 
+                    _id: {$concat: ["m", { $toString: "$_id" }]}, 
                     timestamp: "$_id", 
                     articleAidList: { $slice: ["$articleAidList", 5]},
                     temporalGranularity: "monthly"
@@ -532,11 +540,14 @@ db.read_cat.aggregate([
 
             // output
             {"$out": "popRankSciMth"}
-        ]{ allowDiskUse: true })
+        ],
+        { allowDiskUse: true })
 ```
+
 Weekly:
+
 ```
-db.read.aggregate([
+mongos> db.read.aggregate([
             // only look for science articles
             { $match: { category: "science"}},
 
@@ -545,10 +556,10 @@ db.read.aggregate([
 
             // add year and month fields
             { $addFields: {
-                year: { $year: "$date"}, 
-                month : {$month: "$date"},
+                year: { $year: "$date" },
+                month: { $month: "$date" },
                 week: {$week: "$date"},
-                popScore: {$sum: [{$toInt: "$readOrNot"}, {$toInt: "$agreeOrNot"}, {$toInt: "$commentOrNot"}, {$toInt: "$shareOrNot"}]}
+                popScore: {$sum: [{$toInt: "$readOrNot"}, {$toInt: "$agreeOrNot"}, {$toInt: "$commentOrNot"}, {$toInt: "$shareOrNot"}]}}
             },
 
             // add unix timestamp defined only by yr and mth
@@ -576,7 +587,7 @@ db.read.aggregate([
             // keep only top five articles in array
             { 
                 $project: { 
-                    _id: {$concat: ["w","$_id"]}, 
+                    _id: {$concat: ["w", { $toString: "$_id" }]}, 
                     timestamp: "$_id", 
                     articleAidList: { $slice: ["$articleAidList", 5]},
                     temporalGranularity: "weekly"
@@ -585,11 +596,14 @@ db.read.aggregate([
 
             // output
             {"$out": "popRankSciWk"}
-        ]{ allowDiskUse: true })
+        ],
+        { allowDiskUse: true })
 ```
+
+
 Daily:
 ```
-db.read_cat.aggregate([
+mongos> db.read.aggregate([
             // only look for science articles
             { $match: { category: "science"}},
 
@@ -598,14 +612,14 @@ db.read_cat.aggregate([
 
             // add year and month fields
             { $addFields: {
-                year: { $year: "$date"}, 
-                month : {$month: "$date"},
-                day: {$dayOfYear: "$date"},
-                popScore: {$sum: [{$toInt: "$readOrNot"}, {$toInt: "$agreeOrNot"}, {$toInt: "$commentOrNot"}, {$toInt: "$shareOrNot"}]}
+                year: { $year: "$date" },
+                month: { $month: "$date" },
+                day: {$dayOfYear: "$date" },
+                popScore: {$sum: [{$toInt: "$readOrNot"}, {$toInt: "$agreeOrNot"}, {$toInt: "$commentOrNot"}, {$toInt: "$shareOrNot"}]}}
             },
 
             // add unix timestamp defined only by yr and mth
-            { $addFields: { timestamp: { $subtract: [ { $dateFromParts: { 'year' : "$year", 'month' : "$month", 'day': "$day" } }, new Date("1970-01-01") ] }}},
+            { $addFields: { timestamp: { $subtract: [ { $dateFromParts: { 'year' : "$year", 'month' : "$month", 'day': "$day"} }, new Date("1970-01-01") ] }}},
 
             // Group by year, month, aid and compute popularity score
             {
@@ -629,7 +643,7 @@ db.read_cat.aggregate([
             // keep only top five articles in array
             { 
                 $project: { 
-                    _id: {$concat: ["d","$_id"]}, 
+                    _id: {$concat: ["d", { $toString: "$_id" }]}, 
                     timestamp: "$_id", 
                     articleAidList: { $slice: ["$articleAidList", 5]},
                     temporalGranularity: "daily"
@@ -638,8 +652,10 @@ db.read_cat.aggregate([
 
             // output
             {"$out": "popRankSciDay"}
-        ], { allowDiskUse: true })
+        ],
+        { allowDiskUse: true })
 ```
+
 Combine into db.popRankSci
 ```
 mongos> db.popRankSciMth.find().forEach( function(doc) { db.popRankSci.insert(doc) })
@@ -654,8 +670,8 @@ We do the same as before, and generate three separate collections, retaining onl
 Monthly:
 
 ```
-db.read_cat.aggregate([
-            // retain only science articles
+mongos> db.read.aggregate([
+            // retain only technology articles
             { $match: {category: "technology"}},
 
             // project relevant fields from db.read
@@ -663,9 +679,9 @@ db.read_cat.aggregate([
 
             // add year and month fields
             { $addFields: {
-                year: { $year: "$date"}, 
-                month : {$month: "$date"},
-                popScore: {$sum: [{$toInt: "$readOrNot"}, {$toInt: "$agreeOrNot"}, {$toInt: "$commentOrNot"}, {$toInt: "$shareOrNot"}]}
+                year: { $year: "$date" },
+                month: { $month: "$date" },
+                popScore: {$sum: [{$toInt: "$readOrNot"}, {$toInt: "$agreeOrNot"}, {$toInt: "$commentOrNot"}, {$toInt: "$shareOrNot"}]}}
             },
 
             // add unix timestamp defined only by yr and mth
@@ -693,7 +709,7 @@ db.read_cat.aggregate([
             // keep only top five articles in array
             { 
                 $project: { 
-                    _id: {$concat: ["m","$_id"]}, 
+                    _id: {$concat: ["m", { $toString: "$_id" }]}, 
                     timestamp: "$_id", 
                     articleAidList: { $slice: ["$articleAidList", 5]},
                     temporalGranularity: "monthly"
@@ -702,12 +718,13 @@ db.read_cat.aggregate([
 
             // output
             {"$out": "popRankTechMth"}
-        ]{ allowDiskUse: true })
+        ],
+        { allowDiskUse: true })
 ```
 Weekly:
 ```
-db.read.aggregate([
-            // only look for science articles
+mongos> db.read.aggregate([
+            // only look for technology articles
             { $match: { category: "technology"}},
 
             // project relevant fields from db.read
@@ -715,10 +732,10 @@ db.read.aggregate([
 
             // add year and month fields
             { $addFields: {
-                year: { $year: "$date"}, 
-                month : {$month: "$date"},
+                year: { $year: "$date" },
+                month: { $month: "$date" },
                 week: {$week: "$date"},
-                popScore: {$sum: [{$toInt: "$readOrNot"}, {$toInt: "$agreeOrNot"}, {$toInt: "$commentOrNot"}, {$toInt: "$shareOrNot"}]}
+                popScore: {$sum: [{$toInt: "$readOrNot"}, {$toInt: "$agreeOrNot"}, {$toInt: "$commentOrNot"}, {$toInt: "$shareOrNot"}]}}
             },
 
             // add unix timestamp defined only by yr and mth
@@ -746,7 +763,7 @@ db.read.aggregate([
             // keep only top five articles in array
             { 
                 $project: { 
-                    _id: {$concat: ["w","$_id"]}, 
+                    _id: {$concat: ["w", { $toString: "$_id" }]}, 
                     timestamp: "$_id", 
                     articleAidList: { $slice: ["$articleAidList", 5]},
                     temporalGranularity: "weekly"
@@ -754,13 +771,15 @@ db.read.aggregate([
             },
 
             // output
-            {"$out": "popRankTech"}
-        ]{ allowDiskUse: true })
+            {"$out": "popRankTechWk"}
+        ],
+        { allowDiskUse: true })
 ```
+
 Daily:
 ```
-db.read_cat.aggregate([
-            // only look for science articles
+mongos> db.read.aggregate([
+            // only look for technology articles
             { $match: { category: "technology"}},
 
             // project relevant fields from db.read
@@ -768,14 +787,14 @@ db.read_cat.aggregate([
 
             // add year and month fields
             { $addFields: {
-                year: { $year: "$date"}, 
-                month : {$month: "$date"},
-                day: {$dayOfYear: "$date"},
-                popScore: {$sum: [{$toInt: "$readOrNot"}, {$toInt: "$agreeOrNot"}, {$toInt: "$commentOrNot"}, {$toInt: "$shareOrNot"}]}
+                year: { $year: "$date" },
+                month: { $month: "$date" },
+                day: {$dayOfYear: "$date" },
+                popScore: {$sum: [{$toInt: "$readOrNot"}, {$toInt: "$agreeOrNot"}, {$toInt: "$commentOrNot"}, {$toInt: "$shareOrNot"}]}}
             },
 
             // add unix timestamp defined only by yr and mth
-            { $addFields: { timestamp: { $subtract: [ { $dateFromParts: { 'year' : "$year", 'month' : "$month", 'day': "$day" } }, new Date("1970-01-01") ] }}},
+            { $addFields: { timestamp: { $subtract: [ { $dateFromParts: { 'year' : "$year", 'month' : "$month", 'day': "$day"} }, new Date("1970-01-01") ] }}},
 
             // Group by year, month, aid and compute popularity score
             {
@@ -799,7 +818,7 @@ db.read_cat.aggregate([
             // keep only top five articles in array
             { 
                 $project: { 
-                    _id: {$concat: ["d","$_id"]}, 
+                    _id: {$concat: ["d", { $toString: "$_id" }]}, 
                     timestamp: "$_id", 
                     articleAidList: { $slice: ["$articleAidList", 5]},
                     temporalGranularity: "daily"
@@ -808,8 +827,10 @@ db.read_cat.aggregate([
 
             // output
             {"$out": "popRankTechDay"}
-        ], { allowDiskUse: true })
+        ],
+        { allowDiskUse: true })
 ```
+
 Combine into db.popRankTech
 ```
 mongos> db.popRankTechMth.find().forEach( function(doc) { db.popRankTech.insert(doc) })
@@ -825,14 +846,14 @@ We have to shard db.popRank to dbms2shard; db.popRankTech to dbms2shard; db.popR
 All of db.popRank is assigned to dbms2shard.
 
 ```
-mongos> db.popRank.createIndex({"id": 1})
-mongos> sh.shardCollection("ddbs.popRank", {"id": 1})
+mongos> db.popRank.createIndex({"_id": 1})
+mongos> sh.shardCollection("ddbs.popRank", {"_id": 1})
 mongos> sh.disableBalancing("ddbs.popRank")
 mongos> sh.addShardTag("dbms2rs", "POPALL")
 mongos> sh.addTagRange(
             "ddbs.popRank",
-            {"id": MinKey},
-            {"id": MaxKey},
+            {"_id": MinKey},
+            {"_id": MaxKey},
             "POPALL"
         )
 mongos> sh.enableBalancing("ddbs.popRank")
@@ -844,14 +865,14 @@ mongos> db.popRank.getShardDistribution()
 All of db.popRankTech is assigned to dbms2shard.
 
 ```
-mongos> db.popRankTech.createIndex({"id": 1})
-mongos> sh.shardCollection("ddbs.popRankTech", {"id": 1})
+mongos> db.popRankTech.createIndex({"_id": 1})
+mongos> sh.shardCollection("ddbs.popRankTech", {"_id": 1})
 mongos> sh.disableBalancing("ddbs.popRankTech")
 mongos> sh.addShardTag("dbms2rs", "POPTECH")
 mongos> sh.addTagRange(
             "ddbs.popRankTech",
-            {"id": MinKey},
-            {"id": MaxKey},
+            {"_id": MinKey},
+            {"_id": MaxKey},
             "POPTECH"
         )
 mongos> sh.enableBalancing("ddbs.popRankTech")
@@ -871,14 +892,14 @@ Then, we apply sharding for both copies.
 
 For db.popRankSci, assign to dbms1shard.
 ```
-mongos> db.popRankSci.createIndex({"id": 1})
-mongos> sh.shardCollection("ddbs.popRankSci", {"id": 1})
+mongos> db.popRankSci.createIndex({"_id": 1})
+mongos> sh.shardCollection("ddbs.popRankSci", {"_id": 1})
 mongos> sh.disableBalancing("ddbs.popRankSci")
 mongos> sh.addShardTag("dbms1rs", "POPSCI")
 mongos> sh.addTagRange(
             "ddbs.popRankSci",
-            {"id": MinKey},
-            {"id": MaxKey},
+            {"_id": MinKey},
+            {"_id": MaxKey},
             "POPSCI"
         )
 mongos> sh.enableBalancing("ddbs.popRankSci")
@@ -888,14 +909,14 @@ mongos> db.popRankSci.getShardDistribution()
 
 For db.popRankSci2, assign to dbms2shard.
 ```
-mongos> db.popRankSci2.createIndex({"id": 1})
-mongos> sh.shardCollection("ddbs.popRankSci2", {"id": 1})
+mongos> db.popRankSci2.createIndex({"_id": 1})
+mongos> sh.shardCollection("ddbs.popRankSci2", {"_id": 1})
 mongos> sh.disableBalancing("ddbs.popRankSci2")
 mongos> sh.addShardTag("dbms2rs", "POPSCI2")
 mongos> sh.addTagRange(
             "ddbs.popRankSci2",
-            {"id": MinKey},
-            {"id": MaxKey},
+            {"_id": MinKey},
+            {"_id": MaxKey},
             "POPSCI2"
         )
 mongos> sh.enableBalancing("ddbs.popRankSci2")
@@ -912,7 +933,7 @@ At this point, we have several collections that are sharded and residing on dbms
 | user  | BJ  | HK |
 | article  | SCI  | TECH |
 | articlesci | - | SCI2 |
-| read_reg | BJ | HK |
+| read | BJ | HK |
 | beread | SCI | TECH |
 | bereadsci | - | SCI2 |
 | popRank | - | POPALL |
@@ -923,8 +944,6 @@ At this point, we have several collections that are sharded and residing on dbms
 Unsharded temporary collections are:
 - uid_reg
 - art_cat_ts
-- read
-- read_cat
 - popRankMth
 - popRankWk
 - popRankDay
