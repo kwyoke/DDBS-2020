@@ -140,38 +140,6 @@ mongos> sh.enableBalancing("ddbs.articlesci")
 mongos> sh.status()
 mongos> db.articlesci.getShardDistribution()
 ```
-Automatically refresh db.articlesci when db.article is updated with "science" articles. This is done in a python script via pymongo and db.collection.watch() which checks for any updates to the collection as the script is running. Simply run the python script auto_refresh.py in the local terminal (doesn't have to be in the container) in the background to ensure that db.articlesci is updated when necessary. $merge is good because it merges changes to existing collection instead of rewriting the entire collection.
-```
-python -m pip install pymongo
-python auto_refresh.py
-```
-
-```
-#auto_refresh.py
-import pymongo
-from pymongo import MongoClient
-
-client = MongoClient('mongodb://192.168.1.152:60000/') #connect to host containing mongos router
-db = client.ddbs_proj
-
-with db.article.watch(
-        [{'$match': {'fullDocument.category': 'science'}}]) as stream:
-    for change in stream:
-        print(change)
-        db.article.aggregate([
-            {"$match": {"category": "science"}},
-            {"$merge": {"into": "articlesci", "whenMatched":"replace"}}
-        ])
-```
-You can test out the refreshing capability by inserting science articles into db.article. In the mongo shell of mongos container:
-```
-mongos> use ddbs
-mongos> db.article.insert([
-            {"aid": "11111", category: "science"},
-            {"aid": "22222}
-            ])
-```
-The auto_refresh.py script should print out the changes made, and the db.articlesci should be updated as well.
 
 ## Implementing sharding for read collection
 We have to shard db.read according to user region, so first we need to add a region column to db.read, set that as index, and configure sharding zones based on it.
@@ -321,8 +289,6 @@ mongos> sh.enableBalancing("ddbs.bereadsci")
 mongos> sh.status()
 mongos> db.bereadsci.getShardDistribution()
 ```
-#### Auto refresh of db.bereadsci
-Edit the auto_refresh.py script to update db.bereadsci when db.read updated
 
 ## Populating and sharding popular rank collections
 
@@ -936,3 +902,35 @@ mongos> sh.enableBalancing("ddbs.popRankSci2")
 mongos> sh.status()
 mongos> db.popRankSci2.getShardDistribution()
 ```
+
+## Summary
+
+At this point, we have several collections that are sharded and residing on dbms1shard and dbms2shard, and several that are temporal and reside on the mongos server,
+
+| Collection  | Sharded to dbms1_shard | Sharded to dbms2_shard |
+| ------------- | ------------- | ------------- |
+| user  | BJ  | HK |
+| article  | SCI  | TECH |
+| articlesci | - | SCI2 |
+| read_reg | BJ | HK |
+| beread | SCI | TECH |
+| bereadsci | - | SCI2 |
+| popRank | - | POPALL |
+| popRankSci | POPSCI | - |
+| popRankSci2 | - | POPSCI2 |
+| popRankTech | - | POPTECH |
+
+Unsharded temporary collections are:
+- uid_reg
+- art_cat_ts
+- read
+- read_cat
+- popRankMth
+- popRankWk
+- popRankDay
+- popRankSciMth
+- popRankSciWk
+- popRankSciDay
+- popRankTechMth
+- popRankTechWk
+- popRankTechDay
