@@ -334,6 +334,8 @@ mongos> db.articlesci.find({"aid": "654321"})
 mongos> db.article.remove({"aid": "654321"})
 mongos> db.articlesci.remove({"aid": "654321"})
 ```
+Output printed out by auto_refresh_onarticle.py
+
 
 ### Test refreshing on db.read updates
 
@@ -369,4 +371,4 @@ mongos> db.beread.find({"_id": "123456"})
 mongos> db.popRank.find({}).sort({"timestamp": -1}).limit(1)
 mongos> db.popRankTech.find({}).sort({"timestamp": -1}).limit(1)
 ```
-The auto_refresh.py script should print out the changes made, and the db.articlesci should be updated as well.
+Changes printed out by auto_refresh.py
