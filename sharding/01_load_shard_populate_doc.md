@@ -36,6 +36,8 @@ mongos> use ddbs
 mongos> show collections
 mongos> db.user.findOne()
 ```
+![user findOne](/pics/user.png?raw=true "Optional Title")
+![article findOne](/pics/article.png?raw=true "Optional Title")
 
 ## Implement sharding and zoning for user and article collections
 
@@ -198,6 +200,8 @@ mongos> db.read.aggregate([
             )
 ```
 
+![read findOne](/pics/read.png?raw=true "Optional Title")
+
 ### Sharding db.read based on region
 This is just the standard sharding procedure like what we did for db.user.
 ```
@@ -260,6 +264,8 @@ mongos> db.read.aggregate(
         )
 ```
 This step is quite fast, about a few minutes, since there's only 10000 articles.
+
+![beread findOne](/pics/beread.png?raw=true "Optional Title")
 
 ### Sharding db.beread
 Then, we do the same sharding process as db.article: "science" articles to dbms1shard, "technology" articles to dbms2shard.
@@ -488,6 +494,7 @@ mongos> db.popRankWk.find().forEach( function(doc) { db.popRank.insert(doc) })
 mongos> db.popRankDay.find().forEach( function(doc) { db.popRank.insert(doc) })
 mongos> db.popRank.aggregate([ {$sort: {timestamp:1}}, {$out: "popRank"} ])
 ```
+![poprank findOne](/pics/poprank.png?raw=true "Optional Title")
 
 ### Create db.popRankSci
 We do the same as before, and generate three separate collections, retaining only science articles, and combine the collections into one table.
