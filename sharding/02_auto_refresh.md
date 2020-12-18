@@ -335,6 +335,7 @@ mongos> db.article.remove({"aid": "654321"})
 mongos> db.articlesci.remove({"aid": "654321"})
 ```
 Output printed out by auto_refresh_onarticle.py
+![auto refresh art](/pics/autorefreshonarticle.png?raw=true "Optional Title")
 
 
 ### Test refreshing on db.read updates
@@ -371,4 +372,5 @@ mongos> db.beread.find({"_id": "123456"})
 mongos> db.popRank.find({}).sort({"timestamp": -1}).limit(1)
 mongos> db.popRankTech.find({}).sort({"timestamp": -1}).limit(1)
 ```
-Changes printed out by auto_refresh.py
+Changes printed out by auto_refresh_onread.py
+![auto refresh read](/pics/autorefreshonread.png?raw=true "Optional Title")
