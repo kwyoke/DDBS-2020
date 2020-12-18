@@ -28,7 +28,7 @@ mongos> db.user.getShardDistribution()
 ```
 ### ENTER dbms1shard (30s)
 ```
-docker exec -it dbms1rs bash
+docker exec -it dbms1svr bash
 mongo
 ```
 ```
