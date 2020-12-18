@@ -59,5 +59,5 @@ The auto_refresh.py script should print out the changes made, and the db.article
 	"shareOrNot" : "54321",
 	"commentDetail" : "",
 	"region" : "Beijing",
-	"category" : "science"
+	"category" : "technology"
 }
