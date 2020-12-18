@@ -1,12 +1,12 @@
 # THINGS TO SHOW IN DEMO
 
-## DOCKER CONTAINERS AND MEMORY
+## DOCKER CONTAINERS AND MEMORY (20s)
 ```
 docker ps
 free -h
 ```
 
-## MONGOS SHELL, SHOW BEREAD, POPRANK
+## MONGOS SHELL, SHOW BEREAD, POPRANK (40s)
 ```
 docker exec -it mongos bash
 mongo
@@ -19,14 +19,14 @@ mongos> db.beread.findOne()
 mongos> db.popRank.findOne()
 ```
 
-## SHARDING
+## SHARDING (1min 30s)
 ```
 mongos> sh.status()
 mongos> db.article.getShardDistribution()
 mongos> db.article.insert({"aid": "12345678", "category": "technology})
 mongos> db.article.getShardDistribution()
 ```
-### ENTER dbms1shard
+### ENTER dbms1shard (30s)
 ```
 docker exec -it dbms1shard bash
 mongo
@@ -35,7 +35,7 @@ mongo
 mongos> use ddbs
 mongos> db.article.count()
 ```
-## Watch and update
+## Watch and update (40s)
 ```
 python auto_refresh_onread.py
 ```
@@ -62,7 +62,7 @@ mongos> db.read.insert({
 		})
 ```
 
-## GET IMAGE FROM GRIDFS
+## GET IMAGE FROM GRIDFS (40s)
 ```
 mongos> db.article.find({"aid": "5"})
 ```
