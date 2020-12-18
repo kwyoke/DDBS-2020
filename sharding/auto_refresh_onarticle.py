@@ -7,7 +7,7 @@ db = client.ddbs
 with db.article.watch(
         [{'$match': {'fullDocument.category': 'science'}}]) as stream:
     for change in stream:
-        print(change)
+        print("db.articlesci updated", change['fullDocument'])
 
         # aggregate instead of just insert to account for all types of updates (insertion, removal, changed fields)
         db.article.aggregate([

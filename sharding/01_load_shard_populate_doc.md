@@ -956,3 +956,181 @@ Unsharded temporary collections are:
 - popRankTechMth
 - popRankTechWk
 - popRankTechDay
+
+Verbose version of output from sh.status()
+```
+mongos> sh.status()
+--- Sharding Status --- 
+  sharding version: {
+  	"_id" : 1,
+  	"minCompatibleVersion" : 5,
+  	"currentVersion" : 6,
+  	"clusterId" : ObjectId("5fdb81979268fb7dcdec317f")
+  }
+  shards:
+        {  "_id" : "dbms1rs",  "host" : "dbms1rs/192.168.1.152:50001",  "state" : 1,  "tags" : [ "BJ", "SCI", "POPSCI" ] }
+        {  "_id" : "dbms2rs",  "host" : "dbms2rs/192.168.1.152:50002",  "state" : 1,  "tags" : [ "HK", "TECH", "SCI2", "POPALL", "POPTECH", "POPSCI2" ] }
+        {  "_id" : "grid1rs",  "host" : "grid1rs/192.168.1.152:50003",  "state" : 1,  "tags" : [ "MEDIA" ] }
+        {  "_id" : "grid2rs",  "host" : "grid2rs/192.168.1.152:50004",  "state" : 1,  "tags" : [ "MEDIA" ] }
+  active mongoses:
+        "4.4.2" : 1
+  autosplit:
+        Currently enabled: yes
+  balancer:
+        Currently enabled:  yes
+        Currently running:  no
+        Failed balancer rounds in last 5 attempts:  0
+        Migration Results for the last 24 hours: 
+                824 : Success
+  databases:
+        {  "_id" : "config",  "primary" : "config",  "partitioned" : true }
+                config.system.sessions
+                        shard key: { "_id" : 1 }
+                        unique: false
+                        balancing: true
+                        chunks:
+                                dbms1rs	256
+                                dbms2rs	256
+                                grid1rs	256
+                                grid2rs	256
+                        too many chunks to print, use verbose if you want to force print
+        {  "_id" : "ddbs",  "primary" : "grid2rs",  "partitioned" : true,  "version" : {  "uuid" : UUID("5cf7f860-ceed-46cc-9150-36ab50db0f1e"),  "lastMod" : 1 } }
+                ddbs.article
+                        shard key: { "category" : 1, "aid" : 1 }
+                        unique: false
+                        balancing: true
+                        chunks:
+                                dbms1rs	1
+                                dbms2rs	2
+                                grid1rs	1
+                                grid2rs	1
+                        { "category" : { "$minKey" : 1 }, "aid" : { "$minKey" : 1 } } -->> { "category" : "science", "aid" : { "$minKey" : 1 } } on : grid1rs Timestamp(4, 0) 
+                        { "category" : "science", "aid" : { "$minKey" : 1 } } -->> { "category" : "science", "aid" : { "$maxKey" : 1 } } on : dbms1rs Timestamp(3, 0) 
+                        { "category" : "science", "aid" : { "$maxKey" : 1 } } -->> { "category" : "technology", "aid" : { "$minKey" : 1 } } on : dbms2rs Timestamp(5, 0) 
+                        { "category" : "technology", "aid" : { "$minKey" : 1 } } -->> { "category" : "technology", "aid" : { "$maxKey" : 1 } } on : dbms2rs Timestamp(2, 0) 
+                        { "category" : "technology", "aid" : { "$maxKey" : 1 } } -->> { "category" : { "$maxKey" : 1 }, "aid" : { "$maxKey" : 1 } } on : grid2rs Timestamp(5, 1) 
+                         tag: SCI  { "category" : "science", "aid" : { "$minKey" : 1 } } -->> { "category" : "science", "aid" : { "$maxKey" : 1 } }
+                         tag: TECH  { "category" : "technology", "aid" : { "$minKey" : 1 } } -->> { "category" : "technology", "aid" : { "$maxKey" : 1 } }
+                ddbs.articlesci
+                        shard key: { "category" : 1, "aid" : 1 }
+                        unique: false
+                        balancing: true
+                        chunks:
+                                dbms2rs	1
+                                grid1rs	1
+                                grid2rs	1
+                        { "category" : { "$minKey" : 1 }, "aid" : { "$minKey" : 1 } } -->> { "category" : "science", "aid" : { "$minKey" : 1 } } on : grid1rs Timestamp(3, 0) 
+                        { "category" : "science", "aid" : { "$minKey" : 1 } } -->> { "category" : "science", "aid" : { "$maxKey" : 1 } } on : dbms2rs Timestamp(2, 0) 
+                        { "category" : "science", "aid" : { "$maxKey" : 1 } } -->> { "category" : { "$maxKey" : 1 }, "aid" : { "$maxKey" : 1 } } on : grid2rs Timestamp(3, 1) 
+                         tag: SCI2  { "category" : "science", "aid" : { "$minKey" : 1 } } -->> { "category" : "science", "aid" : { "$maxKey" : 1 } }
+                ddbs.beread
+                        shard key: { "category" : 1, "aid" : 1 }
+                        unique: false
+                        balancing: true
+                        chunks:
+                                dbms1rs	2
+                                dbms2rs	1
+                                grid1rs	1
+                                grid2rs	1
+                        { "category" : { "$minKey" : 1 }, "aid" : { "$minKey" : 1 } } -->> { "category" : "science", "aid" : { "$minKey" : 1 } } on : grid1rs Timestamp(4, 0) 
+                        { "category" : "science", "aid" : { "$minKey" : 1 } } -->> { "category" : "science", "aid" : { "$maxKey" : 1 } } on : dbms1rs Timestamp(2, 0) 
+                        { "category" : "science", "aid" : { "$maxKey" : 1 } } -->> { "category" : "technology", "aid" : { "$minKey" : 1 } } on : dbms1rs Timestamp(5, 0) 
+                        { "category" : "technology", "aid" : { "$minKey" : 1 } } -->> { "category" : "technology", "aid" : { "$maxKey" : 1 } } on : dbms2rs Timestamp(3, 0) 
+                        { "category" : "technology", "aid" : { "$maxKey" : 1 } } -->> { "category" : { "$maxKey" : 1 }, "aid" : { "$maxKey" : 1 } } on : grid2rs Timestamp(5, 1) 
+                         tag: SCI  { "category" : "science", "aid" : { "$minKey" : 1 } } -->> { "category" : "science", "aid" : { "$maxKey" : 1 } }
+                         tag: TECH  { "category" : "technology", "aid" : { "$minKey" : 1 } } -->> { "category" : "technology", "aid" : { "$maxKey" : 1 } }
+                ddbs.bereadsci
+                        shard key: { "category" : 1, "aid" : 1 }
+                        unique: false
+                        balancing: true
+                        chunks:
+                                dbms2rs	1
+                                grid1rs	1
+                                grid2rs	1
+                        { "category" : { "$minKey" : 1 }, "aid" : { "$minKey" : 1 } } -->> { "category" : "science", "aid" : { "$minKey" : 1 } } on : grid1rs Timestamp(3, 0) 
+                        { "category" : "science", "aid" : { "$minKey" : 1 } } -->> { "category" : "science", "aid" : { "$maxKey" : 1 } } on : dbms2rs Timestamp(2, 0) 
+                        { "category" : "science", "aid" : { "$maxKey" : 1 } } -->> { "category" : { "$maxKey" : 1 }, "aid" : { "$maxKey" : 1 } } on : grid2rs Timestamp(3, 1) 
+                         tag: SCI2  { "category" : "science", "aid" : { "$minKey" : 1 } } -->> { "category" : "science", "aid" : { "$maxKey" : 1 } }
+                ddbs.fs.chunks
+                        shard key: { "files_id" : "hashed" }
+                        unique: false
+                        balancing: true
+                        chunks:
+                                grid1rs	143
+                                grid2rs	143
+                        too many chunks to print, use verbose if you want to force print
+                         tag: MEDIA  { "files_id" : { "$minKey" : 1 } } -->> { "files_id" : { "$maxKey" : 1 } }
+                ddbs.popRank
+                        shard key: { "_id" : 1 }
+                        unique: false
+                        balancing: true
+                        chunks:
+                                dbms2rs	1
+                        { "_id" : { "$minKey" : 1 } } -->> { "_id" : { "$maxKey" : 1 } } on : dbms2rs Timestamp(2, 0) 
+                         tag: POPALL  { "_id" : { "$minKey" : 1 } } -->> { "_id" : { "$maxKey" : 1 } }
+                ddbs.popRankSci
+                        shard key: { "_id" : 1 }
+                        unique: false
+                        balancing: true
+                        chunks:
+                                dbms1rs	1
+                        { "_id" : { "$minKey" : 1 } } -->> { "_id" : { "$maxKey" : 1 } } on : dbms1rs Timestamp(2, 0) 
+                         tag: POPSCI  { "_id" : { "$minKey" : 1 } } -->> { "_id" : { "$maxKey" : 1 } }
+                ddbs.popRankSci2
+                        shard key: { "_id" : 1 }
+                        unique: false
+                        balancing: true
+                        chunks:
+                                dbms2rs	1
+                        { "_id" : { "$minKey" : 1 } } -->> { "_id" : { "$maxKey" : 1 } } on : dbms2rs Timestamp(2, 0) 
+                         tag: POPSCI2  { "_id" : { "$minKey" : 1 } } -->> { "_id" : { "$maxKey" : 1 } }
+                ddbs.popRankTech
+                        shard key: { "_id" : 1 }
+                        unique: false
+                        balancing: true
+                        chunks:
+                                dbms2rs	1
+                        { "_id" : { "$minKey" : 1 } } -->> { "_id" : { "$maxKey" : 1 } } on : dbms2rs Timestamp(2, 0) 
+                         tag: POPTECH  { "_id" : { "$minKey" : 1 } } -->> { "_id" : { "$maxKey" : 1 } }
+                ddbs.read
+                        shard key: { "region" : 1, "id" : 1 }
+                        unique: false
+                        balancing: true
+                        chunks:
+                                dbms1rs	6
+                                dbms2rs	6
+                                grid2rs	3
+                        { "region" : { "$minKey" : 1 }, "id" : { "$minKey" : 1 } } -->> { "region" : "Beijing", "id" : { "$minKey" : 1 } } on : grid2rs Timestamp(10, 1) 
+                        { "region" : "Beijing", "id" : { "$minKey" : 1 } } -->> { "region" : "Beijing", "id" : "r254224" } on : dbms1rs Timestamp(2, 0) 
+                        { "region" : "Beijing", "id" : "r254224" } -->> { "region" : "Beijing", "id" : "r407529" } on : dbms1rs Timestamp(3, 0) 
+                        { "region" : "Beijing", "id" : "r407529" } -->> { "region" : "Beijing", "id" : "r561100" } on : dbms1rs Timestamp(4, 0) 
+                        { "region" : "Beijing", "id" : "r561100" } -->> { "region" : "Beijing", "id" : "r714264" } on : dbms1rs Timestamp(5, 0) 
+                        { "region" : "Beijing", "id" : "r714264" } -->> { "region" : "Beijing", "id" : "r867889" } on : dbms1rs Timestamp(6, 0) 
+                        { "region" : "Beijing", "id" : "r867889" } -->> { "region" : "Beijing", "id" : { "$maxKey" : 1 } } on : dbms1rs Timestamp(7, 0) 
+                        { "region" : "Beijing", "id" : { "$maxKey" : 1 } } -->> { "region" : "Hong Kong", "id" : { "$minKey" : 1 } } on : grid2rs Timestamp(11, 1) 
+                        { "region" : "Hong Kong", "id" : { "$minKey" : 1 } } -->> { "region" : "Hong Kong", "id" : "r128946" } on : dbms2rs Timestamp(8, 0) 
+                        { "region" : "Hong Kong", "id" : "r128946" } -->> { "region" : "Hong Kong", "id" : "r337446" } on : dbms2rs Timestamp(9, 0) 
+                        { "region" : "Hong Kong", "id" : "r337446" } -->> { "region" : "Hong Kong", "id" : "r547000" } on : dbms2rs Timestamp(10, 0) 
+                        { "region" : "Hong Kong", "id" : "r547000" } -->> { "region" : "Hong Kong", "id" : "r7568" } on : dbms2rs Timestamp(11, 0) 
+                        { "region" : "Hong Kong", "id" : "r7568" } -->> { "region" : "Hong Kong", "id" : "r966260" } on : dbms2rs Timestamp(12, 0) 
+                        { "region" : "Hong Kong", "id" : "r966260" } -->> { "region" : "Hong Kong", "id" : { "$maxKey" : 1 } } on : dbms2rs Timestamp(13, 0) 
+                        { "region" : "Hong Kong", "id" : { "$maxKey" : 1 } } -->> { "region" : { "$maxKey" : 1 }, "id" : { "$maxKey" : 1 } } on : grid2rs Timestamp(13, 1) 
+                         tag: BJ  { "region" : "Beijing", "id" : { "$minKey" : 1 } } -->> { "region" : "Beijing", "id" : { "$maxKey" : 1 } }
+                         tag: HK  { "region" : "Hong Kong", "id" : { "$minKey" : 1 } } -->> { "region" : "Hong Kong", "id" : { "$maxKey" : 1 } }
+                ddbs.user
+                        shard key: { "region" : 1, "uid" : 1 }
+                        unique: false
+                        balancing: true
+                        chunks:
+                                dbms1rs	2
+                                dbms2rs	1
+                                grid1rs	1
+                                grid2rs	1
+                        { "region" : { "$minKey" : 1 }, "uid" : { "$minKey" : 1 } } -->> { "region" : "Beijing", "uid" : { "$minKey" : 1 } } on : grid1rs Timestamp(4, 0) 
+                        { "region" : "Beijing", "uid" : { "$minKey" : 1 } } -->> { "region" : "Beijing", "uid" : { "$maxKey" : 1 } } on : dbms1rs Timestamp(3, 0) 
+                        { "region" : "Beijing", "uid" : { "$maxKey" : 1 } } -->> { "region" : "Hong Kong", "uid" : { "$minKey" : 1 } } on : dbms1rs Timestamp(5, 0) 
+                        { "region" : "Hong Kong", "uid" : { "$minKey" : 1 } } -->> { "region" : "Hong Kong", "uid" : { "$maxKey" : 1 } } on : dbms2rs Timestamp(2, 0) 
+                        { "region" : "Hong Kong", "uid" : { "$maxKey" : 1 } } -->> { "region" : { "$maxKey" : 1 }, "uid" : { "$maxKey" : 1 } } on : grid2rs Timestamp(5, 1) 
+                         tag: BJ  { "region" : "Beijing", "uid" : { "$minKey" : 1 } } -->> { "region" : "Beijing", "uid" : { "$maxKey" : 1 } }
+                         tag: HK  { "region" : "Hong Kong", "uid" : { "$minKey" : 1 } } -->> { "region" : "Hong Kong", "uid" : { "$maxKey" : 1 } }
+```
