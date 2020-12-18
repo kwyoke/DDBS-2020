@@ -22,9 +22,9 @@ mongos> db.popRank.findOne()
 ## SHARDING (1min 30s)
 ```
 mongos> sh.status()
-mongos> db.article.getShardDistribution()
-mongos> db.article.insert({"aid": "12345678", "category": "technology})
-mongos> db.article.getShardDistribution()
+mongos> db.user.getShardDistribution()
+mongos> db.user.insert({"uid": "12345678", "region": "Beijing"})
+mongos> db.user.getShardDistribution()
 ```
 ### ENTER dbms1shard (30s)
 ```
@@ -33,7 +33,7 @@ mongo
 ```
 ```
 mongos> use ddbs
-mongos> db.article.count()
+mongos> db.user.count()
 ```
 ## Watch and update (40s)
 ```
