@@ -22,7 +22,7 @@ The collections db.user, db.article, db.read are sharded according to requiremen
 When there are insertions or updates to db.user, db.article and db.read, the derived collections db.beread and db.popRank also updates. Using pymongo and MongoDB's changestream utilities, we are able to constantly watch for changes and react to them accordingly. Detailed instructions can be found in [02_auto_refresh.md](https://github.com/kwyoke/DDBS-2020/blob/main/sharding/02_auto_refresh.md).
 
 ### Loading and sharding multimedia data in GridFS
-The multimedia data is quite large, and is loaded into GridFS servers with the mongofiles utility (used from command line). Detailed instructions can be found in [03_gridfs.md](https://github.com/kwyoke/DDBS-2020/blob/main/sharding/03_gridfs.md)
+The multimedia data is quite large, and is loaded into GridFS servers with the mongofiles utility (used from command line). Detailed instructions can be found in [03_gridfs.md](https://github.com/kwyoke/DDBS-2020/blob/main/sharding/03_gridfs.md). The multimedia data can then be easily retrieved from GridFS using the mongofiles utility.
 
 ### Monitoring of data distribution and server workload
 Simply type in the mongos mongo shell "sh.status" to get an overall summary of each shard server, and db.article.getShardDistribution() to get the amount of documents distributed across different shards.

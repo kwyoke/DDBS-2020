@@ -52,3 +52,10 @@ done
 ```
 
 Note that this might consume a lot of RAM, but I was able to do it with 16GB RAM with all my containers running. You should restart your computer after the multimedia data has finished uploading to clear your RAM.
+
+## Retrieving files from GridFS
+Use the mongofiles utility to get image by its filename in your local terminal. This will copy the image file into your local directory, and we can use xdg-open to display the image.
+```
+mongofiles --host=192.168.1.152:60000 -d=ddbs get image_a0_0.jpg
+xdg-open image_a0_0.jpg
+```
