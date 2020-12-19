@@ -175,7 +175,7 @@ mongos> db.read.aggregate([
 Note that the join takes approximately an hour for 1mil documents in db.read. To observe the progress, open another terminal for mongos bash and inspect the tmp collection which should have a name like "tmp.agg_out..."
 
 ### Adding category and article timestamp column to db.read
-For subsequent purposes, it will be more convenient if the read table has the category column (for sharding db.beread and db.popRank). Therefore, we will add a category column to db.read before sharding it.
+For subsequent purposes, it will be more convenient if the read table has the category column (for sharding db.beread and db.popRank)and also article timestamp (for assigning to db.beread). Therefore, we will add a category column and article_ts column to db.read.
 
 First, we form a temporary db.aid_cat_ts as $lookup only works on unsharded collections.
 ```
@@ -318,7 +318,7 @@ mongos> db.bereadsci.getShardDistribution()
 
 ## Populating and sharding popular rank collections
 
-We populate db.poprank by aggregating db.read. We create three separate collections calculating db.poprRankMth, db.popRankWk, db.popRankDay by grouping according to timestamps. Then we combine all three collections into one to form db.popRank. Popularity is calculated by summing up the total number of reads, comments, agrees and shares per article per unit time. 
+We populate db.poprank by aggregating db.read. We create three separate collections calculating db.popRankMth, db.popRankWk, db.popRankDay by grouping according to timestamps. Then we combine all three collections into one to form db.popRank. Popularity is calculated by summing up the total number of reads, comments, agrees and shares per article per unit time. 
 
 The task also requires us to generate three types of db.poprank tables: (1) db.popRank contains the ranks of both science and technology articles to be assigned to dbms2shard; (2) db.popRankSci contains the ranks of science articles only and should be assigned to both dbms1shard and dbms2shard; (3) db.popRankTech contains the ranks of technology articles only and should be assigned to dbms2shard.
 

@@ -56,7 +56,7 @@ We assume that changes to db.read are insertions only which is reasonable as it 
 Run the python script auto_refresh_onread.py in another terminal of your local computer simultaneously with auto_refresh_onarticle.py in the background. Currently, MongoDB does not support watching multiple collections in the same script so I have separated them in two scripts.
 
 ```
-python auto_refresh_onarticle.py
+python auto_refresh_onread.py
 ```
 
 The code to update db.beread, db.bereadsci, db.popRank, db.popRankTech, db.popRankSci and db.popRankSci2 in the python script are shown below:
