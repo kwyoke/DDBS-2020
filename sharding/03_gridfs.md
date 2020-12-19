@@ -36,7 +36,7 @@ Run bash script in the directory proj_mongodb/sharding/.
 ./bulk_store_multimedia.sh
 ```
 
-mongodile command in bash script: 
+mongofiles command in bash script: 
 ```
 # bulk_store_multimedia.sh bash script
 
