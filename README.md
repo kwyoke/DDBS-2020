@@ -12,7 +12,7 @@ I implemented this project on a Ubuntu 18.04 machine, following instructions fro
 
 3. Install [pymongo](https://pymongo.readthedocs.io/en/stable/installation.html) as we will be using python scripts to interact with the MongoDB collections.
 
-4. (Optional) I used the command line throughout in this tutorial, but MongoDB comes with GUIs like [MongoDB Compass](https://www.mongodb.com/products/compass) that would make MongoDB more user friendly, so you can install if you wish to.
+4. (Optional) I used the command line throughout in this project, but MongoDB comes with GUIs like [MongoDB Compass](https://www.mongodb.com/products/compass) that would make MongoDB more user friendly, so you can install if you wish to.
 
 ## Demo
 [![Watch the demo video to see DBMS in action](/pics/demostill.png?raw=true "Optional Title")](https://u.pcloud.link/publink/show?code=XZYrz8XZe9OFYT2EnWbEBBCyxOBTYbIVupkX)
